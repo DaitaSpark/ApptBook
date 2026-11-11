@@ -67,8 +67,8 @@ function renderCalendar() {
     el('calendar').append(button);
   }
 }
-function chooseDate(day) {
-  if (saving) return;
+function chooseDate(day, {focus = true, automatic = false} = {}) {
+  if (saving && !automatic) return;
   clearSelection();
   selectedDate = day;
   renderCalendar();
@@ -90,7 +90,7 @@ function chooseDate(day) {
   }
   steps.find(button => button.dataset.step === 'time').disabled = false;
   stage('time');
-  times.querySelector('button')?.focus({preventScroll: true});
+  if (focus) times.querySelector('button')?.focus({preventScroll: true});
 }
 function chooseTime(slot, button) {
   if (saving) return;
@@ -125,12 +125,14 @@ async function loadSlots(eventId) {
       await rpc('appt_public_slots', {p_event_id: eventId});
     if (sequence !== loadSequence) return;
     slots = loaded.map(slot => ({...slot, local_start: slot.local_start || localTimestamp(slot.starts_at),
-      local_end: slot.local_end || localTimestamp(slot.ends_at)})).filter(slot => slot.local_start > today);
+      local_end: slot.local_end || localTimestamp(slot.ends_at)})).filter(slot => slot.local_start > today)
+      .sort((left, right) => left.local_start.localeCompare(right.local_start));
     months = [...new Set(slots.map(slot => slot.local_start.slice(0, 7)))].sort();
     if (!months.length) months = [today.slice(0, 7)];
     const firstAvailable = slots.find(slot => slot.remaining > 0);
     monthIndex = firstAvailable ? months.indexOf(firstAvailable.local_start.slice(0, 7)) : 0;
     renderCalendar();
+    if (firstAvailable) chooseDate(firstAvailable.local_start.slice(0, 10), {focus: false, automatic: true});
     el('availability-status').textContent = slots.some(slot => slot.remaining > 0) ? '' : 'No upcoming times are available. Please check back soon.';
   } catch (error) {
     if (sequence !== loadSequence) return;

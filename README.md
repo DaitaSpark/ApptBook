@@ -40,6 +40,8 @@ Example: PGA Show January 27-29, 2027, with last starts at 3:30 p.m. on Jan 27-2
 
 The booking page uses compact headings, spacing, calendar cells, time buttons, and fields. Mobile keeps legible 16px input text and usable touch targets. Browser QA verifies the full 14-time PGA day, calendar, and confirmation button above the fold at desktop/tablet heights down to 600px and phone viewports down to 320x568; very small viewports, browser zoom, expanded notes, and unusually long event descriptions may still need scrolling.
 
+On initial load, event changes, and availability refresh, the earliest future date with remaining capacity is selected automatically and its available times are displayed. No time is preselected and no booking is submitted automatically. Mobile opens the time step with the chosen date shown; tap Date to choose another day. Fully booked dates are skipped, and fully booked schedules stay unselected. Automatic selection does not move keyboard focus.
+
 For correcting existing availability, **Replace unbooked slots on these dates** removes all unbooked slots for that event on those dates (including outside the new hours) before generating the new series. Booked slots retain their IDs, times, capacity, and reservations; overlaps are skipped and reported. Other dates and events are untouched. The option resets after a successful generation. Admin availability displays both start and end times. Applying migration 002 alone never changes a live schedule.
 
 ## Render: create a Static Site

@@ -45,6 +45,12 @@ def mocked(page, mode='success'):
             data = [dict(slot, remaining=0 if state['full'] and slot['id'] == SLOT else slot['remaining']) for slot in SLOTS]
             if body['p_event_id'] == OTHER:
                 data = PGA_SLOTS if mode == 'pga' else [dict(SLOTS[0], id=OTHER)]
+            if mode == 'unordered':
+                data = list(reversed(data))
+            elif mode == 'next-available':
+                data = [dict(slot, remaining=0 if slot['id'] in [SLOT, NEXT] else 1) for slot in data]
+            elif mode == 'all-full':
+                data = [dict(slot, remaining=0) for slot in data]
         elif path == 'appt_book':
             attempts.append(body)
             if mode == 'network' and len(attempts) == 1:
@@ -88,6 +94,8 @@ def mocked(page, mode='success'):
 
 
 def select_time(page):
+    if not page.locator('.calendar-panel').is_visible():
+        page.locator('[data-step="date"]').click()
     page.locator('.has-availability').first.click()
     page.locator('[data-slot]').first.click()
     assert page.locator('#booking-form').is_visible()
@@ -106,7 +114,11 @@ with sync_playwright() as playwright:
         page.on('pageerror', lambda error: errors.append(str(error)))
         calls, attempts = mocked(page)
         page.goto(URL)
-        page.locator('.has-availability').first.wait_for()
+        page.locator('.has-availability').first.wait_for(state='attached')
+        assert page.locator('#day-times').is_visible()
+        assert page.locator('.calendar-day.selected').get_attribute('data-date') == '2099-01-05'
+        assert not page.locator('#booking-form').is_visible()
+        page.locator('[data-step="date"]').click()
         calendar = page.locator('.calendar-panel').bounding_box()
         assert calendar['y'] + calendar['height'] <= height, (width, 'calendar', calendar)
         month = page.locator('#month-label').inner_text()
@@ -131,7 +143,7 @@ with sync_playwright() as playwright:
         page = browser.new_page()
         calls, attempts = mocked(page, mode)
         page.goto(URL)
-        page.locator('.has-availability').first.wait_for()
+        page.locator('.has-availability').first.wait_for(state='attached')
         select_time(page)
         fill_guest(page)
         page.locator('#book-button').click()
@@ -152,7 +164,7 @@ with sync_playwright() as playwright:
     page = browser.new_page()
     calls, attempts = mocked(page)
     page.goto(URL)
-    page.locator('.has-availability').first.wait_for()
+    page.locator('.has-availability').first.wait_for(state='attached')
     page.locator('#event-choice').select_option(OTHER)
     page.wait_for_function("document.getElementById('event-name').textContent === 'Another person'")
     page.locator('.has-availability').first.click()
@@ -164,11 +176,36 @@ with sync_playwright() as playwright:
     print('PASS event switching and date changes reset the selected time')
     page.close()
 
+    for mode, expected_date in [('unordered', '2099-01-05'), ('next-available', '2099-02-05')]:
+        page = browser.new_page()
+        mocked(page, mode)
+        page.goto(URL)
+        page.locator('#day-times').wait_for(state='visible')
+        assert page.locator('.calendar-day.selected').get_attribute('data-date') == expected_date
+        assert not page.locator('#booking-form').is_visible()
+        assert page.locator('[data-slot].selected').count() == 0
+        assert not page.evaluate("document.activeElement.matches('[data-slot]')")
+        print(f'PASS {mode}: earliest date with capacity selected automatically, no meeting preselected or focus stolen')
+        page.close()
+    page = browser.new_page()
+    mocked(page, 'all-full')
+    page.goto(URL)
+    page.wait_for_function("document.getElementById('availability-status').textContent.includes('No upcoming times')")
+    assert page.locator('.calendar-day.selected').count() == 0
+    assert not page.locator('#day-times').is_visible()
+    assert not page.locator('#booking-form').is_visible()
+    print('PASS fully booked schedules do not preselect an unavailable date')
+    page.close()
+
     for width, height in [(1366, 768), (1280, 600), (1024, 600), (768, 600), (390, 844), (375, 667), (320, 568)]:
         page = browser.new_page(viewport={'width': width, 'height': height})
         calls, attempts = mocked(page, 'pga')
         page.goto(f'{URL}/?event={OTHER}')
-        page.locator('.has-availability').first.wait_for()
+        page.locator('.has-availability').first.wait_for(state='attached')
+        assert page.locator('#day-times').is_visible()
+        assert page.locator('.calendar-day.selected').get_attribute('data-date') == '2099-01-27'
+        assert page.locator('[data-slot]').count() == 14
+        assert not page.locator('#booking-form').is_visible()
         assert not page.locator('#event-picker').is_visible()
         assert page.locator('#event-choice').is_disabled()
         assert page.locator('#event-choice option').count() == 1
@@ -178,6 +215,7 @@ with sync_playwright() as playwright:
         assert page.locator('#next-month').is_disabled()
         for link in page.locator('[data-booking-home]').all():
             assert link.get_attribute('href') == f'/?event={OTHER}'
+        page.locator('[data-step="date"]').click()
         calendar = page.locator('.calendar-panel').bounding_box()
         assert calendar['y'] + calendar['height'] < height - 10, (width, 'calendar', calendar)
         page.locator('.has-availability').first.click()
@@ -194,11 +232,11 @@ with sync_playwright() as playwright:
         page.locator('#confirmation').wait_for(state='visible')
         assert page.locator('#event-choice').is_disabled()
         page.locator('#another-booking').click()
-        page.locator('.has-availability').first.wait_for()
+        page.locator('.has-availability').first.wait_for(state='attached')
         assert not page.locator('#event-picker').is_visible()
         assert all(body['p_event_id'] == OTHER for path, body in calls if path == 'appt_public_slots')
         page.locator('[data-booking-home]').first.click()
-        page.locator('.has-availability').first.wait_for()
+        page.locator('.has-availability').first.wait_for(state='attached')
         assert page.locator('#event-name').inner_text() == 'PGA Show'
         assert not page.locator('#event-picker').is_visible()
         print(f'PASS {width}x{height}: scoped PGA link, all 14 times and confirmation above fold, no default-calendar navigation')
@@ -267,7 +305,7 @@ with sync_playwright() as playwright:
 
     page = browser.new_page()
     page.goto(URL)
-    page.locator('.has-availability').first.wait_for()
+    page.locator('.has-availability').first.wait_for(state='attached')
     select_time(page)
     assert page.locator('#book-button').is_disabled()
     assert page.locator('#preview-label').is_visible()
