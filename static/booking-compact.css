@@ -27,6 +27,13 @@ body.booking-page main { padding-top: 14px; }
 .booking-page .booking-columns > section { padding: 14px; }
 .booking-page .booking-columns h2 { font-size: 21px; margin-bottom: 4px; }
 .booking-page .booking-columns .hint { font-size: 11px; line-height: 1.4; margin: 3px 0 8px; }
+.booking-page .details-panel:has(#booking-form:not([hidden])) #selection {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+  margin: 6px 0 12px;
+}
 .booking-page .month-navigation { margin: 10px 0 8px; font-size: 13px; }
 .booking-page .month-navigation button { min-height: 30px; padding: 2px 9px; }
 .booking-page .calendar-weekdays { font-size: 10px; margin-bottom: 5px; }
