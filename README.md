@@ -13,7 +13,7 @@ Copy-Item .env.example .env
 .venv\Scripts\python -m flask --app app run --debug
 ```
 
-Open http://127.0.0.1:5000 and visit /admin to create a person/event and add dates. Local data uses SQLite in instance/ unless DATABASE_URL is configured. Never commit .env.
+Open http://127.0.0.1:5000. On a fresh database, init-db creates JR & Co. Appointments with weekday availability for the next 30 days: Monday?Friday, 9 a.m.?4 p.m. Eastern, 30-minute slots, one place per slot. Past times are omitted. Holidays are included. Visit /admin to add people/events or generate more weekday slots for a chosen date range. New events default to the same 30-day schedule (optional checkbox), using their configured capacity. The last daily slot is 3:30?4 p.m. Re-running generation preserves existing overlapping slots and bookings; this is explicit date generation, not a recurring rule. Local data uses SQLite in instance/ unless DATABASE_URL is configured. Never commit .env.
 
 ## Render and Supabase
 

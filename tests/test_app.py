@@ -2,10 +2,10 @@ import os
 import unittest
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
-from app import Booking, EASTERN, Event, Slot, create_app, db
+from app import Booking, EASTERN, Event, Slot, add_workday_slots, create_app, db
 
 
 class BookingTests(unittest.TestCase):
@@ -116,6 +116,48 @@ class BookingTests(unittest.TestCase):
                 self.assertEqual(db.session.get(Slot, slot_id).reserved, 2)
                 db.session.remove()
                 db.engine.dispose()
+
+    def test_weekday_generation_boundaries_and_rerun(self):
+        with self.app.app_context():
+            event = Event(name='Weekdays', default_capacity=1)
+            db.session.add(event)
+            db.session.flush()
+            # Friday through Monday includes two workdays and skips the weekend.
+            first, last = date(2030, 1, 4), date(2030, 1, 7)
+            self.assertEqual(add_workday_slots(event, first, last, datetime(2030, 1, 1)), 28)
+            db.session.commit()
+            slots = db.session.query(Slot).filter_by(event_id=event.id).order_by(Slot.starts_at).all()
+            self.assertEqual(slots[0].starts_at, datetime(2030, 1, 4, 9))
+            self.assertEqual(slots[-1].starts_at, datetime(2030, 1, 7, 15, 30))
+            self.assertEqual(slots[-1].ends_at, datetime(2030, 1, 7, 16))
+            self.assertTrue(all(s.starts_at.weekday() < 5 and s.capacity == 1 for s in slots))
+            slots[0].reserved = 1
+            db.session.commit()
+            self.assertEqual(add_workday_slots(event, first, last, datetime(2030, 1, 1)), 0)
+            self.assertEqual(slots[0].reserved, 1)
+
+    def test_weekday_generation_skips_past_and_overlaps(self):
+        with self.app.app_context():
+            event = Event(name='Custom availability', default_capacity=1)
+            db.session.add(event)
+            db.session.flush()
+            db.session.add(Slot(event_id=event.id, starts_at=datetime(2030, 1, 7, 10, 15),
+                ends_at=datetime(2030, 1, 7, 11, 15), capacity=5))
+            db.session.commit()
+            count = add_workday_slots(event, date(2030, 1, 7), date(2030, 1, 7), datetime(2030, 1, 7, 9, 10))
+            self.assertEqual(count, 10)  # 14 less one past slot and three overlapping slots.
+            with self.assertRaises(ValueError):
+                add_workday_slots(event, date(2030, 1, 8), date(2030, 1, 7))
+
+    def test_admin_weekday_generation_requires_login(self):
+        response = self.client.post('/admin/workdays', data={'csrf': self.token()})
+        self.assertIn('/admin/login', response.location)
+        self.client.post('/admin/login', data={'password': 'test-password', 'csrf': self.token()})
+        response = self.client.post('/admin/workdays', data={'csrf': self.token(),
+            'event_id': str(self.event_id), 'first_date': '2030-01-07', 'last_date': '2030-01-07'})
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            self.assertEqual(db.session.query(Slot).filter_by(event_id=self.event_id).count(), 15)
 
 
 if __name__ == '__main__':

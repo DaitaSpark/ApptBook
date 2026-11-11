@@ -3,7 +3,7 @@ import io
 import os
 import secrets
 import smtplib
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from email.message import EmailMessage
 from functools import wraps
 from zoneinfo import ZoneInfo
@@ -50,6 +50,31 @@ class Booking(db.Model):
     slot = db.relationship('Slot')
 
 
+def add_workday_slots(event, first_date, last_date, current_time=None):
+    """Add explicit weekday slots, preserving any existing overlapping availability."""
+    current_time = current_time or datetime.now(EASTERN).replace(tzinfo=None)
+    if last_date < first_date or (last_date - first_date).days > 366:
+        raise ValueError('Choose a date range of at most one year.')
+    existing = list(db.session.scalars(select(Slot).where(Slot.event_id == event.id,
+        Slot.starts_at < datetime.combine(last_date + timedelta(days=1), time.min),
+        Slot.ends_at > datetime.combine(first_date, time.min))))
+    added = 0
+    day = first_date
+    while day <= last_date:
+        if day.weekday() < 5:
+            start = datetime.combine(day, time(9))
+            closing = datetime.combine(day, time(16))
+            while start < closing:
+                end = start + timedelta(minutes=30)
+                if start > current_time and not any(slot.starts_at < end and slot.ends_at > start for slot in existing):
+                    db.session.add(Slot(event_id=event.id, starts_at=start, ends_at=end,
+                        capacity=event.default_capacity))
+                    added += 1
+                start = end
+        day += timedelta(days=1)
+    return added
+
+
 def create_app(config=None):
     app = Flask(__name__)
     database_url = os.getenv('DATABASE_URL', 'sqlite:///appointments.db')
@@ -84,7 +109,8 @@ def create_app(config=None):
 
     @app.context_processor
     def helpers():
-        return {'now': datetime.now(EASTERN).replace(tzinfo=None)}
+        current = datetime.now(EASTERN).replace(tzinfo=None)
+        return {'now': current, 'default_end_date': (current + timedelta(days=29)).date()}
 
     @app.after_request
     def security_headers(response):
@@ -168,12 +194,31 @@ def create_app(config=None):
             capacity = int(request.form['capacity'])
             if not name or len(name) > 160 or not 1 <= capacity <= 10000:
                 raise ValueError()
-            db.session.add(Event(name=name, description=request.form.get('description', '')[:3000],
-                location=request.form.get('location', '')[:240], default_capacity=capacity))
+            event = Event(name=name, description=request.form.get('description', '')[:3000],
+                location=request.form.get('location', '')[:240], default_capacity=capacity)
+            db.session.add(event)
+            db.session.flush()
+            if request.form.get('workdays'):
+                today = datetime.now(EASTERN).date()
+                add_workday_slots(event, today, today + timedelta(days=29))
             db.session.commit()
             flash('Person or event created.', 'success')
         except (ValueError, KeyError):
             flash('Enter a name and a capacity between 1 and 10,000.', 'error')
+        return redirect(url_for('admin'))
+
+    @app.post('/admin/workdays')
+    @admin_only
+    def add_workdays():
+        try:
+            event = db.get_or_404(Event, int(request.form['event_id']))
+            count = add_workday_slots(event, date.fromisoformat(request.form['first_date']),
+                date.fromisoformat(request.form['last_date']))
+            db.session.commit()
+            flash(f'Added {count} weekday slots, 9 a.m.–4 p.m. Eastern. Existing slots were preserved.', 'success')
+        except (ValueError, KeyError):
+            db.session.rollback()
+            flash('Choose a valid start and end date, no more than one year apart.', 'error')
         return redirect(url_for('admin'))
 
     @app.post('/admin/slots')
@@ -214,6 +259,15 @@ def create_app(config=None):
     @app.cli.command('init-db')
     def init_db():
         db.create_all()
+        if db.session.scalar(select(Event.id).limit(1)) is None:
+            event = Event(name='JR & Co. Appointments',
+                description='Book a 30-minute meeting with JR & Co.', default_capacity=1)
+            db.session.add(event)
+            db.session.flush()
+            today = datetime.now(EASTERN).date()
+            count = add_workday_slots(event, today, today + timedelta(days=29))
+            db.session.commit()
+            print(f'Created JR & Co. Appointments with {count} weekday slots for the next 30 days.')
         print('Database tables created.')
 
     @app.get('/health')
