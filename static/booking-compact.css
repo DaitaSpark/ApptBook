@@ -1,0 +1,59 @@
+/* Booking pages stay compact; admin controls keep their existing dimensions. */
+body.booking-page { font-size: 14px; }
+body.booking-page header, body.booking-page main, body.booking-page footer { max-width: 1080px; }
+body.booking-page .top-strip { padding: 5px 16px; font-size: 9px; }
+body.booking-page header { padding-top: 7px; padding-bottom: 7px; }
+body.booking-page .brand img { width: 38px; height: 44px; }
+.booking-page .brand { gap: 12px; }
+.booking-page .brand small { padding: 10px 0 10px 12px; font-size: 8px; }
+.booking-page header nav { font-size: 12px; gap: 20px; }
+body.booking-page main { padding-top: 14px; }
+.booking-page .booking-heading { gap: 14px; margin-bottom: 8px; }
+.booking-page .booking-heading h1 { font-size: 32px; line-height: 1.1; }
+.booking-page .booking-heading .eyebrow { font-size: 9px; margin-bottom: 3px; }
+.booking-page .booking-heading > p { font-size: 12px; }
+.booking-page .event-bar { gap: 8px; }
+.booking-page .event-bar strong { font-size: 14px; }
+.booking-page .event-bar span { font-size: 12px; }
+.booking-page .event-bar > #event-picker { font-size: 11px; }
+.booking-page .event-bar > #event-picker select { font-size: 13px; padding: 4px 8px; }
+.booking-page .booking-description { font-size: 12px; margin: 3px 0 8px; max-height: 36px; }
+.booking-page .booking-description:empty { display: none; }
+.booking-page .booking-workspace { margin-top: 8px; }
+.booking-page .booking-steps button { padding: 8px 6px; font-size: 12px; }
+.booking-page .booking-columns { grid-template-columns: 1fr 1fr 1.12fr; min-height: 0; }
+.booking-page .booking-columns > section { padding: 14px; }
+.booking-page .booking-columns h2 { font-size: 21px; margin-bottom: 4px; }
+.booking-page .booking-columns .hint { font-size: 11px; line-height: 1.4; margin: 3px 0 8px; }
+.booking-page .month-navigation { margin: 10px 0 8px; font-size: 13px; }
+.booking-page .month-navigation button { min-height: 30px; padding: 2px 9px; }
+.booking-page .calendar-weekdays { font-size: 10px; margin-bottom: 5px; }
+.booking-page .calendar-grid, .booking-page .calendar-weekdays { gap: 3px; }
+.booking-page .calendar-day { min-height: 31px; padding: 2px 0; font-size: 12px; }
+.booking-page .day-times { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; max-height: min(330px, calc(100svh - 260px)); }
+.booking-page .day-times .time { min-height: 40px; padding: 5px 2px; font-size: 12px; border-radius: 6px; }
+.booking-page .day-times .time small { font-size: 10px; }
+.booking-page .step-placeholder { font-size: 12px; padding: 35px 10px; margin-top: 14px; }
+.booking-page .details-panel label { font-size: 11px; margin: 7px 0; }
+.booking-page .details-panel input { font-size: 14px; padding: 6px 9px; margin-top: 3px; min-height: 34px; }
+.booking-page .details-panel .two-columns { grid-template-columns: 1fr 1fr; gap: 8px; }
+.booking-page .notes-toggle summary { font-size: 11px; padding: 2px 0; }
+.booking-page .details-panel form > button { min-height: 38px; padding: 8px 12px; margin-top: 9px; font-size: 13px; }
+body.booking-page footer { margin-top: 14px; padding-top: 10px; padding-bottom: 10px; font-size: 11px; }
+@media (max-width: 720px) {
+  body.booking-page main { padding: 12px 14px 8px; }
+  body.booking-page header { padding: 7px 14px; }
+  .booking-page header nav { font-size: 11px; gap: 5px 12px; }
+  .booking-page .booking-heading { align-items: center; }
+  .booking-page .booking-heading h1 { font-size: 29px; }
+  .booking-page .booking-heading > p { display: none; }
+  .booking-page .booking-columns { display: block; }
+  .booking-page .booking-columns > section { padding: 12px 14px; }
+  .booking-page .calendar-day { min-height: 36px; font-size: 13px; }
+  .booking-page .month-navigation button { min-height: 36px; min-width: 36px; }
+  .booking-page .day-times .time { min-height: 44px; font-size: 13px; }
+  .booking-page .day-times { max-height: min(330px, calc(100svh - 220px)); }
+  .booking-page .booking-steps button { min-height: 36px; }
+  .booking-page .details-panel input, .booking-page .event-bar > #event-picker select { font-size: 16px; min-height: 40px; }
+  .booking-page .details-panel form > button { min-height: 44px; }
+}

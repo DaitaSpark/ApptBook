@@ -17,6 +17,12 @@ EVENTS = [{'id': EVENT, 'name': 'JR & Co. Appointments', 'description': 'Book a 
 SLOTS = [{'id': SLOT, 'event_id': EVENT, 'starts_at': '2099-01-05T14:00:00Z', 'ends_at': '2099-01-05T14:30:00Z', 'remaining': 1},
          {'id': NEXT, 'event_id': EVENT, 'starts_at': '2099-01-05T14:30:00Z', 'ends_at': '2099-01-05T15:00:00Z', 'remaining': 1},
          {'id': LATER, 'event_id': EVENT, 'starts_at': '2099-02-05T14:00:00Z', 'ends_at': '2099-02-05T14:30:00Z', 'remaining': 1}]
+PGA_SLOTS = []
+for day, count in [(27, 14), (28, 14), (29, 6)]:
+    for index in range(count):
+        start = datetime(2099, 1, day, 14, tzinfo=timezone.utc) + timedelta(minutes=30 * index)
+        PGA_SLOTS.append({'id': f'70000000-0000-4000-8000-{day * 100 + index:012d}', 'event_id': OTHER,
+                          'starts_at': start.isoformat(), 'ends_at': (start + timedelta(minutes=30)).isoformat(), 'remaining': 3})
 
 
 def mocked(page, mode='success'):
@@ -34,11 +40,11 @@ def mocked(page, mode='success'):
         elif '/auth/v1/logout' in request.url:
             data = {}
         elif path == 'appt_public_events':
-            data = EVENTS
+            data = [EVENTS[0], dict(EVENTS[1], name='PGA Show')] if mode == 'pga' else EVENTS
         elif path == 'appt_public_slots':
             data = [dict(slot, remaining=0 if state['full'] and slot['id'] == SLOT else slot['remaining']) for slot in SLOTS]
             if body['p_event_id'] == OTHER:
-                data = [dict(SLOTS[0], id=OTHER)]
+                data = PGA_SLOTS if mode == 'pga' else [dict(SLOTS[0], id=OTHER)]
         elif path == 'appt_book':
             attempts.append(body)
             if mode == 'network' and len(attempts) == 1:
@@ -157,6 +163,56 @@ with sync_playwright() as playwright:
     assert not page.locator('#booking-form').is_visible()
     print('PASS event switching and date changes reset the selected time')
     page.close()
+
+    for width, height in [(1366, 768), (1280, 600), (1024, 600), (768, 600), (390, 844), (375, 667), (320, 568)]:
+        page = browser.new_page(viewport={'width': width, 'height': height})
+        calls, attempts = mocked(page, 'pga')
+        page.goto(f'{URL}/?event={OTHER}')
+        page.locator('.has-availability').first.wait_for()
+        assert not page.locator('#event-picker').is_visible()
+        assert page.locator('#event-choice').is_disabled()
+        assert page.locator('#event-choice option').count() == 1
+        assert page.locator('#event-name').inner_text() == 'PGA Show'
+        assert page.locator('.has-availability').count() == 3
+        assert page.locator('#month-label').inner_text() == 'January 2099'
+        assert page.locator('#next-month').is_disabled()
+        for link in page.locator('[data-booking-home]').all():
+            assert link.get_attribute('href') == f'/?event={OTHER}'
+        calendar = page.locator('.calendar-panel').bounding_box()
+        assert calendar['y'] + calendar['height'] < height - 10, (width, 'calendar', calendar)
+        page.locator('.has-availability').first.click()
+        assert page.locator('[data-slot]').count() == 14
+        times = page.locator('#day-times').bounding_box()
+        assert times['y'] + times['height'] < height - 10, (width, 'times', times)
+        assert page.locator('#day-times').evaluate('(node) => node.scrollHeight <= node.clientHeight + 1')
+        page.locator('[data-slot]').first.click()
+        button = page.locator('#book-button').bounding_box()
+        assert button['y'] + button['height'] < height - 10, (width, 'details', button)
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        fill_guest(page)
+        page.locator('#book-button').click()
+        page.locator('#confirmation').wait_for(state='visible')
+        assert page.locator('#event-choice').is_disabled()
+        page.locator('#another-booking').click()
+        page.locator('.has-availability').first.wait_for()
+        assert not page.locator('#event-picker').is_visible()
+        assert all(body['p_event_id'] == OTHER for path, body in calls if path == 'appt_public_slots')
+        page.locator('[data-booking-home]').first.click()
+        page.locator('.has-availability').first.wait_for()
+        assert page.locator('#event-name').inner_text() == 'PGA Show'
+        assert not page.locator('#event-picker').is_visible()
+        print(f'PASS {width}x{height}: scoped PGA link, all 14 times and confirmation above fold, no default-calendar navigation')
+        page.close()
+
+    for event_id in ['missing-event', '']:
+        page = browser.new_page()
+        calls, attempts = mocked(page)
+        page.goto(f'{URL}/?event={event_id}')
+        page.wait_for_function("document.getElementById('availability-status').textContent.includes('event link is unavailable')")
+        assert not page.locator('#event-picker').is_visible()
+        assert not any(path == 'appt_public_slots' for path, body in calls)
+        print('PASS invalid event links do not fall back to the default calendar')
+        page.close()
 
     page = browser.new_page()
     calls, attempts = mocked(page)

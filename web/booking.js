@@ -4,6 +4,13 @@ let cfg, events = [], slots = [], selectedEvent, selectedDate, selectedSlot, req
 let months = [], monthIndex = 0, loadSequence = 0, saving = false, previewData;
 const form = el('booking-form');
 const steps = [...document.querySelectorAll('[data-step]')];
+const eventParameters = new URLSearchParams(location.search);
+const eventLocked = eventParameters.has('event');
+const linkedEventId = eventParameters.get('event');
+if (eventLocked) {
+  const scopedUrl = `/?event=${encodeURIComponent(linkedEventId)}`;
+  document.querySelectorAll('[data-booking-home]').forEach(link => { link.href = scopedUrl; });
+}
 const timeLabel = slot => slot.local_start.slice(11, 16).replace(/^(\d\d):(\d\d)$/, (_, h, m) => `${+h % 12 || 12}:${m} ${+h >= 12 ? 'PM' : 'AM'}`);
 const dayLabel = (day, options = {weekday: 'long', month: 'long', day: 'numeric'}) =>
   new Intl.DateTimeFormat('en-US', {timeZone: 'UTC', ...options}).format(new Date(`${day}T12:00:00Z`));
@@ -102,6 +109,7 @@ function chooseTime(slot, button) {
   stage('details');
 }
 async function loadSlots(eventId) {
+  if (eventLocked && String(eventId) !== linkedEventId) return;
   const sequence = ++loadSequence;
   clearSelection();
   el('booking-workspace').setAttribute('aria-busy', 'true');
@@ -137,6 +145,7 @@ steps.forEach(button => button.addEventListener('click', () => { if (!saving) st
 el('previous-month').addEventListener('click', () => { if (!saving && monthIndex > 0) { monthIndex--; renderCalendar(); } });
 el('next-month').addEventListener('click', () => { if (!saving && monthIndex < months.length - 1) { monthIndex++; renderCalendar(); } });
 el('event-choice').addEventListener('change', async event => {
+  if (eventLocked) { event.target.value = linkedEventId; return; }
   const url = new URL(location.href); url.searchParams.set('event', event.target.value); history.replaceState(null, '', url);
   await loadSlots(event.target.value);
 });
@@ -177,7 +186,7 @@ form.addEventListener('submit', async event => {
     saving = false;
     el('book-button').disabled = false;
     el('book-button').textContent = 'Confirm appointment';
-    el('event-choice').disabled = false;
+    el('event-choice').disabled = eventLocked;
   }
 });
 el('another-booking').addEventListener('click', async () => {
@@ -195,12 +204,19 @@ async function init() {
       events = previewData.events;
       el('preview-label').hidden = false;
     } else events = await rpc('appt_public_events');
+    const linkedEvent = events.find(event => String(event.id) === linkedEventId);
+    if (eventLocked && !linkedEvent) {
+      el('availability-status').textContent = 'This event link is unavailable. Please ask the organizer for a current link.';
+      return;
+    }
     if (!events.length) { el('availability-status').textContent = 'New appointments are on the way. Please check back soon.'; return; }
     el('event-bar').hidden = false;
-    el('event-picker').hidden = events.length < 2;
+    if (eventLocked) events = [linkedEvent];
+    el('event-picker').hidden = eventLocked || events.length < 2;
+    el('event-choice').disabled = eventLocked;
     el('event-choice').replaceChildren(...events.map(event => option(event.id, event.name)));
-    const queryId = new URLSearchParams(location.search).get('event');
-    const selected = events.find(event => String(event.id) === queryId) || events[0];
+    const selected = linkedEvent || events[0];
+    if (eventLocked) document.title = `${selected.name} · JR & Co.`;
     el('event-choice').value = selected.id;
     await loadSlots(selected.id);
   } catch (error) { notify(error.message, true); el('availability-status').textContent = 'Booking is not available yet.'; }
