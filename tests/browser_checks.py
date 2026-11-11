@@ -252,6 +252,49 @@ with sync_playwright() as playwright:
         print('PASS invalid event links do not fall back to the default calendar')
         page.close()
 
+    for suffix, initial in [('showEvents=true', EVENT), (f'event={OTHER}&showEvents=true', OTHER)]:
+        page = browser.new_page()
+        calls, attempts = mocked(page)
+        page.goto(f'{URL}/?{suffix}')
+        page.locator('#day-times').wait_for(state='visible')
+        assert page.locator('#event-picker').is_visible()
+        assert page.locator('#event-choice').is_enabled()
+        assert page.locator('#event-choice option').count() == 2
+        assert page.locator('#event-choice').input_value() == initial
+        target = OTHER if initial == EVENT else EVENT
+        page.locator('#event-choice').select_option(target)
+        page.wait_for_function('(id) => document.querySelector("#event-choice").value === id && document.querySelector("#booking-workspace").getAttribute("aria-busy") === "false"', arg=target)
+        assert 'showEvents=true' in page.url
+        for link in page.locator('[data-booking-home]').all():
+            assert link.get_attribute('href') == f'/?event={target}&showEvents=true'
+        page.reload()
+        page.locator('#day-times').wait_for(state='visible')
+        assert page.locator('#event-choice').is_enabled()
+        assert page.locator('#event-choice').input_value() == target
+        page.locator('[data-slot]').first.click()
+        fill_guest(page)
+        page.locator('#book-button').click()
+        page.locator('#confirmation').wait_for(state='visible')
+        assert page.locator('#event-choice').is_enabled()
+        page.locator('#another-booking').click()
+        page.locator('#day-times').wait_for(state='visible')
+        assert page.locator('#event-picker').is_visible()
+        page.locator('[data-booking-home]').first.click()
+        page.locator('#day-times').wait_for(state='visible')
+        assert page.locator('#event-choice').is_enabled()
+        assert page.locator('#event-choice').input_value() == target
+        print('PASS showEvents=true: dropdown available, chosen event retained across selection, refresh, booking, and home links')
+        page.close()
+    for flag in ['false', '1']:
+        page = browser.new_page()
+        mocked(page)
+        page.goto(f'{URL}/?event={OTHER}&showEvents={flag}')
+        page.locator('#day-times').wait_for(state='visible')
+        assert not page.locator('#event-picker').is_visible()
+        assert page.locator('#event-choice').is_disabled()
+        print('PASS only explicit showEvents=true unlocks an event link')
+        page.close()
+
     page = browser.new_page()
     calls, attempts = mocked(page)
     page.goto(f'{URL}/admin.html')

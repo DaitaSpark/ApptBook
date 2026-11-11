@@ -42,6 +42,8 @@ The booking page uses compact headings, spacing, calendar cells, time buttons, a
 
 On initial load, event changes, and availability refresh, the earliest future date with remaining capacity is selected automatically and its available times are displayed. No time is preselected and no booking is submitted automatically. Mobile opens the time step with the chosen date shown; tap Date to choose another day. Fully booked dates are skipped, and fully booked schedules stay unselected. Automatic selection does not move keyboard focus.
 
+For year-round sharing, use `/?showEvents=true` to show the event dropdown, or append `&showEvents=true` to a specific event link (for example, `/?event=EVENT_UUID&showEvents=true`). The latter preselects that event and allows visitors to switch to the default calendar or other events. The flag stays in the URL through event changes and booking/home navigation, so reloading does not lock the dropdown. Only the exact value `true` enables this option. Event links without that flag stay locked, and invalid event IDs still do not fall back to another calendar. If only one event exists, there is no dropdown to show.
+
 For correcting existing availability, **Replace unbooked slots on these dates** removes all unbooked slots for that event on those dates (including outside the new hours) before generating the new series. Booked slots retain their IDs, times, capacity, and reservations; overlaps are skipped and reported. Other dates and events are untouched. The option resets after a successful generation. Admin availability displays both start and end times. Applying migration 002 alone never changes a live schedule.
 
 ## Render: create a Static Site

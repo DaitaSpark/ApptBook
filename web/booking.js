@@ -5,12 +5,18 @@ let months = [], monthIndex = 0, loadSequence = 0, saving = false, previewData;
 const form = el('booking-form');
 const steps = [...document.querySelectorAll('[data-step]')];
 const eventParameters = new URLSearchParams(location.search);
-const eventLocked = eventParameters.has('event');
+const hasLinkedEvent = eventParameters.has('event');
+const showEvents = eventParameters.get('showEvents') === 'true';
+const eventLocked = hasLinkedEvent && !showEvents;
 const linkedEventId = eventParameters.get('event');
-if (eventLocked) {
-  const scopedUrl = `/?event=${encodeURIComponent(linkedEventId)}`;
-  document.querySelectorAll('[data-booking-home]').forEach(link => { link.href = scopedUrl; });
+function updateBookingLinks(eventId = linkedEventId) {
+  const parameters = new URLSearchParams();
+  if (eventId !== null) parameters.set('event', eventId);
+  if (showEvents) parameters.set('showEvents', 'true');
+  const target = parameters.size ? `/?${parameters}` : '/';
+  document.querySelectorAll('[data-booking-home]').forEach(link => { link.href = target; });
 }
+if (hasLinkedEvent || showEvents) updateBookingLinks();
 const timeLabel = slot => slot.local_start.slice(11, 16).replace(/^(\d\d):(\d\d)$/, (_, h, m) => `${+h % 12 || 12}:${m} ${+h >= 12 ? 'PM' : 'AM'}`);
 const dayLabel = (day, options = {weekday: 'long', month: 'long', day: 'numeric'}) =>
   new Intl.DateTimeFormat('en-US', {timeZone: 'UTC', ...options}).format(new Date(`${day}T12:00:00Z`));
@@ -116,6 +122,7 @@ async function loadSlots(eventId) {
   el('calendar').replaceChildren();
   el('availability-status').textContent = 'Checking availability…';
   selectedEvent = events.find(event => String(event.id) === String(eventId));
+  if (showEvents) updateBookingLinks(String(selectedEvent.id));
   el('event-name').textContent = selectedEvent.name;
   el('event-location').textContent = selectedEvent.location || '';
   el('event-description').textContent = selectedEvent.description || '';
@@ -207,7 +214,7 @@ async function init() {
       el('preview-label').hidden = false;
     } else events = await rpc('appt_public_events');
     const linkedEvent = events.find(event => String(event.id) === linkedEventId);
-    if (eventLocked && !linkedEvent) {
+    if (hasLinkedEvent && !linkedEvent) {
       el('availability-status').textContent = 'This event link is unavailable. Please ask the organizer for a current link.';
       return;
     }
