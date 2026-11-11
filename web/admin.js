@@ -34,6 +34,8 @@ async function dashboard() {
     availability.append(details);
   }
   if (!events.length) availability.textContent = 'Create your first person or event above.';
+  renderReferralLinks(data.referral_links || []);
+  updateReleaseField();
   el('bookings-heading').textContent = `Bookings (${data.booking_count})`;
   el('booking-count').textContent = data.booking_count > data.bookings.length ?
     `Showing the latest ${data.bookings.length}. CSV export includes all bookings.` : '';
@@ -42,10 +44,47 @@ async function dashboard() {
     const row = document.createElement('tr');
     row.append(cell(booking.name), cell([booking.email, booking.phone].filter(Boolean).join('\n')),
       cell(`${booking.event_name}\n${dateFormat(booking.starts_at)}`), cell(booking.notes),
+      cell(booking.source_label ? `${booking.source_label}\n${booking.source_kind || ''}` : 'Direct / untracked'),
       cell(`Email: ${stateLabel(booking.email_status)}\nCalendar: ${stateLabel(booking.calendar_status)}`));
     el('bookings-table').append(row);
   }
-  if (!data.bookings.length) { const row = document.createElement('tr'); const empty = cell('No bookings yet.'); empty.colSpan = 5; row.append(empty); el('bookings-table').append(row); }
+  if (!data.bookings.length) { const row = document.createElement('tr'); const empty = cell('No bookings yet.'); empty.colSpan = 6; row.append(empty); el('bookings-table').append(row); }
+}
+function updateReleaseField() {
+  const event = events.find(event => event.id === el('release-event').value);
+  el('release-form').elements.limit.value = event?.open_times_per_day ?? '';
+}
+el('release-event').addEventListener('change', updateReleaseField);
+function renderReferralLinks(links) {
+  const container = el('referral-links');
+  container.replaceChildren();
+  if (!links.length) { container.textContent = 'No tracking links yet. Create a salesperson or channel link above.'; return; }
+  for (const source of links) {
+    const row = document.createElement('div'); row.className = 'referral-link';
+    const title = document.createElement('strong');
+    const event = events.find(event => event.id === source.event_id);
+    title.textContent = `${source.label} (${source.kind}) — ${event?.name || 'Event'} — ${source.booking_count} bookings${source.active ? '' : ' — disabled'}`;
+    const url = new URL('/', location.origin);
+    url.searchParams.set('event', source.event_id); url.searchParams.set('ref', source.token);
+    const input = document.createElement('input'); input.readOnly = true; input.value = url.href;
+    input.setAttribute('aria-label', `Booking link for ${source.label}`);
+    const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'secondary'; copy.textContent = 'Copy link';
+    copy.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(url.href); notify(`Link copied for ${source.label}.`); }
+      catch { input.focus(); input.select(); notify('Copy the selected link with Ctrl+C or your device’s Copy command.'); }
+    });
+    const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'secondary';
+    toggle.textContent = source.active ? 'Disable link' : 'Enable link';
+    toggle.addEventListener('click', async () => {
+      toggle.disabled = true;
+      try {
+        await rpc('appt_admin_set_referral', {p_id: source.id, p_active: !source.active}, true);
+        await dashboard(); notify('Tracking link updated. Existing booking attribution was preserved.');
+      } catch (error) { notify(error.message, true); toggle.disabled = false; }
+    });
+    const actions = document.createElement('div'); actions.className = 'referral-actions'; actions.append(copy, toggle);
+    row.append(title, input, actions); container.append(row);
+  }
 }
 function mutation(id, action) {
   el(id).addEventListener('submit', async event => {
@@ -58,7 +97,9 @@ function mutation(id, action) {
       const message = await action(Object.fromEntries(new FormData(form)));
       await dashboard();
       notify(message);
-    } catch (error) { notify(error.message, true); }
+    } catch (error) {
+      notify(error.code === 'PGRST202' ? 'Run database update 003_release_and_tracking.sql in Supabase SQL Editor to enable release settings and tracking links.' : error.message, true);
+    }
     finally { button.disabled = false; }
   });
 }
@@ -74,6 +115,15 @@ mutation('event-form', async values => {
     p_location: values.location.trim(), p_capacity: Number(values.capacity), p_workdays: Boolean(values.workdays)}, true);
   el('event-form').reset();
   return 'Person or event created.';
+});
+mutation('release-form', async values => {
+  await rpc('appt_admin_set_release', {p_event_id: values.event_id, p_limit: values.limit ? Number(values.limit) : null}, true);
+  return values.limit ? `This event now offers up to ${values.limit} open time choices per day.` : 'All available time choices are now open for this event.';
+});
+mutation('referral-form', async values => {
+  await rpc('appt_admin_create_referral', {p_event_id: values.event_id, p_label: values.label.trim(), p_kind: values.kind}, true);
+  el('referral-form').elements.label.value = '';
+  return 'Tracking link created. Use Copy link under Tracked event links below to share it.';
 });
 mutation('slot-form', async values => {
   await rpc('appt_admin_add_slot', {p_event_id: values.event_id, p_start: `${values.date}T${values.start}:00`,
@@ -130,9 +180,10 @@ el('export').addEventListener('click', async event => {
       if (/^[=+\-@\t\r\n]/.test(text)) text = "'" + text;
       return '"' + text.replaceAll('"', '""') + '"';
     };
-    const rows = [['Name', 'Email', 'Phone', 'Event', 'Start (Eastern)', 'Notes', 'Email status', 'Calendar status'],
+    const rows = [['Name', 'Email', 'Phone', 'Event', 'Start (Eastern)', 'Notes', 'Source', 'Source type', 'Email status', 'Calendar status'],
       ...records.map(record => [record.name, record.email, record.phone, record.event_name,
-        dateFormat(record.starts_at), record.notes, record.email_status, record.calendar_status])];
+        dateFormat(record.starts_at), record.notes, record.source_label || 'Direct / untracked', record.source_kind || '',
+        record.email_status, record.calendar_status])];
     const url = URL.createObjectURL(new Blob(['\uFEFF' + rows.map(row => row.map(escape).join(',')).join('\r\n')], {type: 'text/csv;charset=utf-8'}));
     const link = document.createElement('a'); link.href = url; link.download = 'jrco-bookings.csv'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);

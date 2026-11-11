@@ -42,6 +42,8 @@ body.booking-page main { padding-top: 14px; }
 .booking-page .day-times { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; max-height: min(330px, calc(100svh - 260px)); }
 .booking-page .day-times .time { min-height: 40px; padding: 5px 2px; font-size: 12px; border-radius: 6px; }
 .booking-page .day-times .time small { font-size: 10px; }
+.booking-page .day-times .time:disabled { opacity: 1; background: #f0f0ed; color: #777970; border-color: #e0e0db; }
+.booking-page .day-times .time:disabled small { color: #696b65; }
 .booking-page .step-placeholder { font-size: 12px; padding: 35px 10px; margin-top: 14px; }
 .booking-page .details-panel label { font-size: 11px; margin: 7px 0; }
 .booking-page .details-panel input { font-size: 14px; padding: 6px 9px; margin-top: 3px; min-height: 34px; }

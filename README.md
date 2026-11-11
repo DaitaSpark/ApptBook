@@ -16,7 +16,7 @@ Open http://127.0.0.1:5000. This **read-only local preview** exports public avai
 ## Connect Supabase
 
 1. Create/select the dedicated project for ApptBook. Do not change BevStats's project without confirming the intended sharing.
-2. In SQL Editor, run `supabase/migrations/001_appointments.sql`, then `supabase/migrations/002_custom_availability.sql`. They create an isolated `appt_private` schema and custom-hour scheduling functions, not public customer tables. They can be reapplied without deleting data. If 001 is already installed, run only 002 for the custom-hour controls.
+2. In SQL Editor, run migrations in order: `001_appointments.sql`, `002_custom_availability.sql`, then `003_release_and_tracking.sql` from `supabase/migrations/`. They create an isolated `appt_private` schema, custom-hour scheduling, staged release, and private source tracking. Existing installations with 001 and 002 need only 003. Applying 003 does not delete slots/bookings or turn on limits for existing events. Reapply migrations in order rather than running an older migration alone over newer function definitions.
 3. Choose initial data:
    - For a fresh schedule, run `supabase/seed.sql` to create JR & Co. Appointments with the next 30 days of weekday availability, 9 a.m. to 4 p.m. Eastern, 30-minute slots, capacity 1. Past times are omitted; holidays are included.
    - To preserve local schedules/bookings, run `python scripts/export_legacy.py`, then run the ignored `supabase/import-legacy.sql` **instead of seed.sql**. The import requires empty appointment tables and refuses to overwrite existing data. It may contain guest information; never commit/publish it. Imported bookings do not automatically trigger new messages or calendar entries.
@@ -45,6 +45,20 @@ On initial load, event changes, and availability refresh, the earliest future da
 For year-round sharing, use `/?showEvents=true` to show the event dropdown, or append `&showEvents=true` to a specific event link (for example, `/?event=EVENT_UUID&showEvents=true`). The latter preselects that event and allows visitors to switch to the default calendar or other events. The flag stays in the URL through event changes and booking/home navigation, so reloading does not lock the dropdown. Only the exact value `true` enables this option. Event links without that flag stay locked, and invalid event IDs still do not fall back to another calendar. If only one event exists, there is no dropdown to show.
 
 For correcting existing availability, **Replace unbooked slots on these dates** removes all unbooked slots for that event on those dates (including outside the new hours) before generating the new series. Booked slots retain their IDs, times, capacity, and reservations; overlaps are skipped and reported. Other dates and events are untouched. The option resets after a successful generation. Admin availability displays both start and end times. Applying migration 002 alone never changes a live schedule.
+
+### Release a few time choices per day
+
+After migration 003, use **Admin > Release time choices**, choose the event, enter `3`, and save. Blank means unlimited. This controls the number of distinct open times, not the capacity per time. With capacity 3, three open times initially offer up to nine places. An open time remains open until all its places are booked; once full, the next chronological future time opens. The limit is independent for each Eastern calendar day and shared across all salesperson/channel links. As time passes, past appointments drop out and later future choices can open.
+
+All scheduled times remain visible for the chosen date: released choices are selectable, unreleased choices are grey **Not yet open**, and full times are grey **Fully booked**. The database enforces release eligibility through both booking endpoints; guessing a later slot ID cannot book it early. Active pages refresh availability every 30 seconds and when their tab becomes visible. Refresh does not interrupt contact-form entry or move focus. A booking submission always rechecks the current release/capacity state. Existing events stay unlimited until an admin saves a release limit.
+
+### Salesperson and channel booking links
+
+Use **Admin > Create a tracked event link**, select an event, choose Salesperson or Channel, and enter its name. **Tracked event links** displays a unique shareable URL, a **Copy link** button, enable/disable controls, and its booking total. Creating the same event/name/type again reuses its link. Example: `/?event=EVENT_UUID&ref=OPAQUE_TOKEN`. Add `&showEvents=true` only when visitors should be able to switch events.
+
+The source is saved with the booking, displayed in Admin's Source column, included in CSV exports, and counted per tracked link. Source names/types stay in the private schema and are not displayed in the public form, confirmation, email, or Google Calendar payload. Existing and ordinary-link bookings are **Direct / untracked**; there is no retroactive attribution. Attribution means the link used, not verified proof of which person shared it. Copying/sharing another person's link credits that link.
+
+The `ref` token is preserved through scoped home links, confirmation return, and reloads. It applies only to its event: switching to another event with showEvents enabled removes the token for that other event. Disabled/unknown/cross-event tokens cannot silently create untracked bookings through a tracked link. Retries keep the original source and never count twice or rewrite attribution. Disabling a link preserves its historical bookings and totals. Untracked bookings can use the legacy endpoint while migration 003 is pending; tracked bookings never fall back and drop their source.
 
 ## Render: create a Static Site
 

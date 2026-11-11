@@ -28,7 +28,7 @@ for day, count in [(27, 14), (28, 14), (29, 6)]:
 def mocked(page, mode='success'):
     calls = []
     attempts = []
-    state = {'full': False}
+    state = {'full': False, 'refs': [], 'limit': None}
     def respond(route):
         request = route.request
         path = request.url.split('/rest/v1/rpc/')[-1]
@@ -40,23 +40,28 @@ def mocked(page, mode='success'):
         elif '/auth/v1/logout' in request.url:
             data = {}
         elif path == 'appt_public_events':
-            data = [EVENTS[0], dict(EVENTS[1], name='PGA Show')] if mode == 'pga' else EVENTS
+            data = [EVENTS[0], dict(EVENTS[1], name='PGA Show', open_times_per_day=3 if mode == 'staged' else None)] if mode in ['pga', 'staged'] else EVENTS
         elif path == 'appt_public_slots':
             data = [dict(slot, remaining=0 if state['full'] and slot['id'] == SLOT else slot['remaining']) for slot in SLOTS]
             if body['p_event_id'] == OTHER:
-                data = PGA_SLOTS if mode == 'pga' else [dict(SLOTS[0], id=OTHER)]
+                data = PGA_SLOTS if mode in ['pga', 'staged'] else [dict(SLOTS[0], id=OTHER)]
+                if mode == 'staged':
+                    data = [dict(slot, is_open=(index < 3)) for index, slot in enumerate(PGA_SLOTS)]
             if mode == 'unordered':
                 data = list(reversed(data))
             elif mode == 'next-available':
                 data = [dict(slot, remaining=0 if slot['id'] in [SLOT, NEXT] else 1) for slot in data]
             elif mode == 'all-full':
                 data = [dict(slot, remaining=0) for slot in data]
-        elif path == 'appt_book':
+        elif path in ['appt_book', 'appt_book_tracked']:
             attempts.append(body)
             if mode == 'network' and len(attempts) == 1:
                 route.abort('failed')
                 return
-            if mode == 'full':
+            if mode == 'legacy-db' and path == 'appt_book_tracked':
+                status = 404
+                data = {'code': 'PGRST202', 'message': 'Booking function not installed yet.'}
+            elif mode == 'full':
                 state['full'] = True
                 status = 400
                 data = {'message': 'That time is no longer available.'}
@@ -64,17 +69,20 @@ def mocked(page, mode='success'):
                 data = {'id': '66666666-6666-4666-8666-666666666666', 'name': body['p_name'],
                         'event_name': EVENTS[0]['name'], 'starts_at': SLOTS[0]['starts_at'],
                         'ends_at': SLOTS[0]['ends_at'], 'location': ''}
+        elif path == 'appt_ref_valid':
+            data = mode != 'invalid-ref' and body['p_token'] == 'a' * 32
         elif path == 'appt_admin_dashboard':
             if mode == 'denied':
                 status, data = 403, {'message': 'An authorized admin account is required.'}
             else:
-                data = {'events': EVENTS, 'slots': [dict(slot, capacity=1, reserved=0) for slot in SLOTS],
+                data = {'events': [dict(event, open_times_per_day=state['limit']) for event in EVENTS], 'slots': [dict(slot, capacity=1, reserved=0) for slot in SLOTS],
                         'bookings': [{'id': SLOT, 'name': '=1+1', 'email': 'guest@example.com', 'phone': '',
                                       'notes': '<img src=x onerror=alert(1)>', 'event_name': EVENTS[0]['name'],
-                                      'starts_at': SLOTS[0]['starts_at'], 'email_status': 'queued', 'calendar_status': 'queued'}],
-                        'booking_count': 1}
+                                      'starts_at': SLOTS[0]['starts_at'], 'source_label': 'Jeff', 'source_kind': 'salesperson',
+                                      'email_status': 'queued', 'calendar_status': 'queued'}],
+                        'booking_count': 1, 'referral_links': state['refs']}
         elif path == 'appt_admin_bookings':
-            data = [{'name': '=1+1', 'email': 'guest@example.com', 'event_name': EVENTS[0]['name'],
+            data = [{'name': '=1+1', 'email': 'guest@example.com', 'event_name': EVENTS[0]['name'], 'source_label': 'Jeff', 'source_kind': 'salesperson',
                      'starts_at': SLOTS[0]['starts_at']}]
         elif path == 'appt_admin_create_event':
             data = OTHER
@@ -84,6 +92,16 @@ def mocked(page, mode='success'):
             data = NEXT
         elif path == 'appt_admin_generate_slots':
             data = {'added': 28, 'removed': 2, 'preserved': 0, 'conflicts': 0}
+        elif path == 'appt_admin_set_release':
+            state['limit'] = body['p_limit']
+            data = None
+        elif path == 'appt_admin_create_referral':
+            data = {'id': 'ref1', 'event_id': body['p_event_id'], 'label': body['p_label'], 'kind': body['p_kind'],
+                    'token': 'a' * 32, 'active': True, 'booking_count': 1}
+            state['refs'].append(data)
+        elif path == 'appt_admin_set_referral':
+            state['refs'][0]['active'] = body['p_active']
+            data = None
         else:
             raise AssertionError(f'Unexpected request: {request.url}')
         route.fulfill(status=status, json=data, headers={'Access-Control-Allow-Origin': '*'})
@@ -324,6 +342,76 @@ with sync_playwright() as playwright:
         print('PASS only explicit showEvents=true unlocks an event link')
         page.close()
 
+    for width, height in [(1366, 768), (390, 844)]:
+        page = browser.new_page(viewport={'width': width, 'height': height})
+        page.clock.install()
+        mocked(page, 'staged')
+        page.goto(f'{URL}/?event={OTHER}')
+        page.locator('.has-availability').first.wait_for(state='attached')
+        if width <= 720:
+            page.locator('#view-selected-times').click()
+        assert page.locator('#day-times .time').count() == 14
+        assert page.locator('#day-times button:not(:disabled)').count() == 3
+        assert page.locator('#day-times button:disabled').count() == 11
+        assert 'Not yet open' in page.locator('#day-times button:disabled').first.inner_text()
+        assert page.locator('#release-hint').is_visible()
+        updated = [dict(slot, remaining=0 if index == 0 else 3, is_open=index in [1, 2, 3])
+                   for index, slot in enumerate(PGA_SLOTS)]
+        page.route('https://supabase.test/rest/v1/rpc/appt_public_slots', lambda route: route.fulfill(json=updated, headers={'Access-Control-Allow-Origin': '*'}))
+        page.clock.run_for(30010)
+        page.wait_for_function('(id) => Boolean(document.querySelector(`[data-slot="${id}"]`))', arg=PGA_SLOTS[3]['id'])
+        assert page.locator('#day-times button:not(:disabled)').count() == 3
+        assert 'Fully booked' in page.locator(f'[data-time-id="{PGA_SLOTS[0]["id"]}"]').inner_text()
+        assert page.locator('#booking-form').is_hidden()
+        print('PASS staged release: three selectable times, accurate grey labels, automatic refresh opens next time')
+        page.close()
+
+    page = browser.new_page()
+    calls, attempts = mocked(page)
+    page.goto(f'{URL}/?event={EVENT}&ref={"a" * 32}&showEvents=true')
+    page.locator('#day-times').wait_for(state='visible')
+    assert 'ref=' in page.locator('[data-booking-home]').first.get_attribute('href')
+    assert 'Jeff' not in page.locator('main').inner_text()
+    page.locator('#event-choice').select_option(OTHER)
+    page.wait_for_function("!location.search.includes('ref=')")
+    page.locator('#event-choice').select_option(EVENT)
+    page.wait_for_function("location.search.includes('ref=') && document.getElementById('booking-workspace').getAttribute('aria-busy') === 'false'")
+    page.reload()
+    page.locator('#day-times').wait_for(state='visible')
+    select_time(page)
+    fill_guest(page)
+    page.locator('#book-button').click()
+    page.locator('#confirmation').wait_for(state='visible')
+    assert attempts[0]['p_ref'] == 'a' * 32
+    print('PASS tracked links preserve attribution through navigation/refresh and submit it privately')
+    page.close()
+    page = browser.new_page()
+    calls, attempts = mocked(page, 'invalid-ref')
+    page.goto(f'{URL}/?event={EVENT}&ref=disabled-token')
+    page.wait_for_function("document.getElementById('availability-status').textContent.includes('no longer active')")
+    assert not page.locator('[data-slot]').count()
+    assert not attempts
+    print('PASS disabled or invalid tracking links cannot silently submit untracked bookings')
+    page.close()
+
+    for tracked in [False, True]:
+        page = browser.new_page()
+        calls, attempts = mocked(page, 'legacy-db')
+        suffix = f'/?event={EVENT}&ref={"a" * 32}' if tracked else '/'
+        page.goto(URL + suffix)
+        page.locator('#day-times').wait_for(state='visible')
+        select_time(page)
+        fill_guest(page)
+        page.locator('#book-button').click()
+        if tracked:
+            page.wait_for_function("document.getElementById('message').textContent.includes('setup is being updated')")
+            assert not any(path == 'appt_book' for path, body in calls)
+        else:
+            page.locator('#confirmation').wait_for(state='visible')
+            assert any(path == 'appt_book' for path, body in calls)
+        print('PASS migration rollout: ordinary bookings retain compatibility, tracked bookings never drop attribution')
+        page.close()
+
     page = browser.new_page()
     calls, attempts = mocked(page)
     page.goto(f'{URL}/admin.html')
@@ -333,6 +421,19 @@ with sync_playwright() as playwright:
     page.locator('#admin-workspace').wait_for(state='visible')
     assert page.locator('#bookings-table img').count() == 0
     assert '<img' in page.locator('#bookings-table').inner_text()
+    assert 'Jeff' in page.locator('#bookings-table').inner_text()
+    page.locator('#release-event').select_option(EVENT)
+    page.locator('#release-form [name="limit"]').fill('3')
+    page.locator('#release-form button').click()
+    page.wait_for_function("document.getElementById('message').textContent.includes('3 open time choices')")
+    page.locator('#referral-form [name="event_id"]').select_option(EVENT)
+    page.locator('#referral-form [name="label"]').fill('Jeff')
+    page.locator('#referral-form button').click()
+    page.wait_for_function("document.querySelectorAll('#referral-links input').length === 1")
+    assert f'event={EVENT}&ref=' in page.locator('#referral-links input').input_value()
+    assert '1 bookings' in page.locator('#referral-links').inner_text()
+    page.locator('#referral-links').get_by_role('button', name='Disable link').click()
+    page.locator('#referral-links').get_by_role('button', name='Enable link').wait_for()
     page.locator('#event-form [name="name"]').fill('New event')
     page.locator('#event-form button').click()
     page.wait_for_function("document.getElementById('message').textContent.includes('created')")
@@ -357,6 +458,7 @@ with sync_playwright() as playwright:
         page.locator('#export').click()
     csv = Path(download.value.path()).read_text(encoding='utf-8-sig')
     assert "'=1+1" in csv
+    assert 'Jeff' in csv and 'salesperson' in csv
     page.locator('#sign-out').click()
     page.locator('#login-panel').wait_for(state='visible')
     assert page.evaluate("sessionStorage.getItem('jrco-admin-session')") is None

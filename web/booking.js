@@ -15,7 +15,7 @@ function showTimes() {
   stage('time');
   if (matchMedia('(max-width: 720px)').matches)
     document.querySelector('.slot-panel').scrollIntoView({block: 'nearest', behavior: 'instant'});
-  el('day-times').querySelector('button')?.focus({preventScroll: true});
+  el('day-times').querySelector('button:not(:disabled)')?.focus({preventScroll: true});
 }
 viewTimes.addEventListener('click', showTimes);
 el('change-date').addEventListener('click', () => {
@@ -28,10 +28,18 @@ const hasLinkedEvent = eventParameters.has('event');
 const showEvents = eventParameters.get('showEvents') === 'true';
 const eventLocked = hasLinkedEvent && !showEvents;
 const linkedEventId = eventParameters.get('event');
+const referralToken = eventParameters.get('ref') || null;
+const activeReferral = eventId => referralToken && String(eventId) === linkedEventId ? referralToken : null;
+const canBook = slot => slot.remaining > 0 && slot.is_open !== false;
+const normalizeSlots = loaded => loaded.map(slot => ({...slot,
+  local_start: slot.local_start || localTimestamp(slot.starts_at), local_end: slot.local_end || localTimestamp(slot.ends_at)}))
+  .filter(slot => slot.local_start > localTimestamp(new Date().toISOString()))
+  .sort((left, right) => left.local_start.localeCompare(right.local_start));
 function updateBookingLinks(eventId = linkedEventId) {
   const parameters = new URLSearchParams();
   if (eventId !== null) parameters.set('event', eventId);
   if (showEvents) parameters.set('showEvents', 'true');
+  if (activeReferral(eventId)) parameters.set('ref', referralToken);
   const target = parameters.size ? `/?${parameters}` : '/';
   document.querySelectorAll('[data-booking-home]').forEach(link => { link.href = target; });
 }
@@ -69,7 +77,7 @@ function renderCalendar() {
   const [year, number] = month.split('-').map(Number);
   const leading = (new Date(Date.UTC(year, number - 1, 1)).getUTCDay() + 6) % 7;
   const days = new Date(Date.UTC(year, number, 0)).getUTCDate();
-  const available = new Set(slots.filter(slot => slot.remaining > 0).map(slot => slot.local_start.slice(0, 10)));
+  const available = new Set(slots.filter(canBook).map(slot => slot.local_start.slice(0, 10)));
   el('calendar').replaceChildren();
   for (let cell = 0; cell < Math.ceil((leading + days) / 7) * 7; cell++) {
     const number = cell - leading + 1;
@@ -105,15 +113,18 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
   const times = el('day-times');
   times.hidden = false;
   times.replaceChildren();
-  for (const slot of slots.filter(slot => slot.local_start.startsWith(day) && slot.remaining > 0)) {
+  for (const slot of slots.filter(slot => slot.local_start.startsWith(day))) {
     const button = document.createElement('button');
-    button.type = 'button'; button.className = 'time'; button.dataset.slot = slot.id;
+    button.type = 'button'; button.className = 'time'; button.dataset.timeId = slot.id;
+    button.disabled = !canBook(slot);
+    if (!button.disabled) button.dataset.slot = slot.id;
     button.textContent = timeLabel(slot);
     button.setAttribute('aria-pressed', 'false');
     const remaining = document.createElement('small');
-    remaining.textContent = `${slot.remaining} ${slot.remaining === 1 ? 'place' : 'places'} left`;
+    remaining.textContent = button.disabled ? (slot.remaining > 0 ? 'Not yet open' : 'Fully booked') :
+      `${slot.remaining} ${slot.remaining === 1 ? 'place' : 'places'} left`;
     button.append(remaining);
-    button.addEventListener('click', () => chooseTime(slot, button));
+    if (!button.disabled) button.addEventListener('click', () => chooseTime(slot, button));
     times.append(button);
   }
   steps.find(button => button.dataset.step === 'time').disabled = false;
@@ -154,16 +165,15 @@ async function loadSlots(eventId) {
     const loaded = cfg.preview ? previewData.slots.filter(slot => String(slot.event_id) === String(eventId)) :
       await rpc('appt_public_slots', {p_event_id: eventId});
     if (sequence !== loadSequence) return;
-    slots = loaded.map(slot => ({...slot, local_start: slot.local_start || localTimestamp(slot.starts_at),
-      local_end: slot.local_end || localTimestamp(slot.ends_at)})).filter(slot => slot.local_start > today)
-      .sort((left, right) => left.local_start.localeCompare(right.local_start));
+    slots = normalizeSlots(loaded);
     months = [...new Set(slots.map(slot => slot.local_start.slice(0, 7)))].sort();
     if (!months.length) months = [today.slice(0, 7)];
-    const firstAvailable = slots.find(slot => slot.remaining > 0);
+    const firstAvailable = slots.find(canBook);
     monthIndex = firstAvailable ? months.indexOf(firstAvailable.local_start.slice(0, 7)) : 0;
     renderCalendar();
     if (firstAvailable) chooseDate(firstAvailable.local_start.slice(0, 10), {focus: false, automatic: true});
-    el('availability-status').textContent = slots.some(slot => slot.remaining > 0) ? '' : 'No upcoming times are available. Please check back soon.';
+    el('availability-status').textContent = slots.some(canBook) ? '' : 'No upcoming times are available. Please check back soon.';
+    el('release-hint').hidden = !selectedEvent.open_times_per_day;
   } catch (error) {
     if (sequence !== loadSequence) return;
     slots = [];
@@ -178,7 +188,10 @@ el('previous-month').addEventListener('click', () => { if (!saving && monthIndex
 el('next-month').addEventListener('click', () => { if (!saving && monthIndex < months.length - 1) { monthIndex++; renderCalendar(); } });
 el('event-choice').addEventListener('change', async event => {
   if (eventLocked) { event.target.value = linkedEventId; return; }
-  const url = new URL(location.href); url.searchParams.set('event', event.target.value); history.replaceState(null, '', url);
+  const url = new URL(location.href); url.searchParams.set('event', event.target.value);
+  if (activeReferral(event.target.value)) url.searchParams.set('ref', referralToken);
+  else url.searchParams.delete('ref');
+  history.replaceState(null, '', url);
   await loadSlots(event.target.value);
 });
 ['email', 'phone'].forEach(name => form.elements[name].addEventListener('input', () => form.elements.email.setCustomValidity('')));
@@ -196,8 +209,18 @@ form.addEventListener('submit', async event => {
   el('book-button').textContent = 'Saving your appointment…';
   notify('');
   try {
-    const receipt = await rpc('appt_book', {p_slot_id: selectedSlot.id, p_request_id: requestId,
-      p_name: values.name.trim(), p_email: values.email.trim(), p_phone: values.phone.trim(), p_notes: values.notes.trim()});
+    const parameters = {p_slot_id: selectedSlot.id, p_request_id: requestId,
+      p_name: values.name.trim(), p_email: values.email.trim(), p_phone: values.phone.trim(), p_notes: values.notes.trim(),
+      p_ref: activeReferral(selectedEvent.id)};
+    let receipt;
+    try { receipt = await rpc('appt_book_tracked', parameters); }
+    catch (error) {
+      // Keep ordinary bookings working while update 003 is being applied.
+      // A tracked link must never silently lose its attribution.
+      if (error.code !== 'PGRST202' || parameters.p_ref) throw error;
+      const {p_ref, ...legacy} = parameters;
+      receipt = await rpc('appt_book', legacy);
+    }
     el('confirmation-name').textContent = `See you then, ${receipt.name}.`;
     el('confirmation-event').textContent = receipt.event_name;
     el('confirmation-time').textContent = `${eastern(receipt.starts_at, {dateStyle: 'full', timeStyle: 'short'})} Eastern`;
@@ -210,10 +233,11 @@ form.addEventListener('submit', async event => {
     form.reset();
     el('confirmation').scrollIntoView({block: 'start', behavior: 'smooth'});
   } catch (error) {
-    if (error.message.includes('no longer available')) {
+    if (error.message.includes('no longer available') || error.message.includes('not yet open')) {
       await loadSlots(selectedEvent.id);
       notify('That time was just booked. Please choose another available time.', true);
-    } else notify(`${error.message} If the connection was interrupted, retrying the same booking will not reserve another place.`, true);
+    } else if (error.code === 'PGRST202') notify('Booking setup is being updated. Please contact the organizer or try again shortly.', true);
+    else notify(`${error.message} If the connection was interrupted, retrying the same booking will not reserve another place.`, true);
   } finally {
     saving = false;
     el('book-button').disabled = false;
@@ -248,6 +272,10 @@ async function init() {
     el('event-choice').disabled = eventLocked;
     el('event-choice').replaceChildren(...events.map(event => option(event.id, event.name)));
     const selected = linkedEvent || events[0];
+    if (referralToken && (!hasLinkedEvent || (!cfg.preview && !await rpc('appt_ref_valid', {p_event_id: selected.id, p_token: referralToken})))) {
+      el('availability-status').textContent = 'This booking link is no longer active. Please contact the organizer.';
+      return;
+    }
     if (eventLocked) document.title = `${selected.name} · JR & Co.`;
     el('event-choice').value = selected.id;
     await loadSlots(selected.id);
@@ -255,3 +283,25 @@ async function init() {
   finally { el('booking-workspace').setAttribute('aria-busy', 'false'); }
 }
 init();
+
+async function refreshReleasedTimes() {
+  if (!selectedEvent || cfg?.preview || saving || !form.hidden || document.hidden) return;
+  const sequence = loadSequence, eventId = selectedEvent.id;
+  try {
+    const updated = normalizeSlots(await rpc('appt_public_slots', {p_event_id: eventId}));
+    if (sequence !== loadSequence || eventId !== selectedEvent.id || saving || !form.hidden) return;
+    if (JSON.stringify(updated) === JSON.stringify(slots)) return;
+    const previousDate = selectedDate, previousStage = el('booking-workspace').dataset.stage, previousMonth = months[monthIndex];
+    slots = updated;
+    months = [...new Set(slots.map(slot => slot.local_start.slice(0, 7)))].sort();
+    if (!months.length) months = [localTimestamp(new Date().toISOString()).slice(0, 7)];
+    const first = slots.find(slot => canBook(slot) && slot.local_start.startsWith(previousDate || '!')) || slots.find(canBook);
+    monthIndex = first ? months.indexOf(first.local_start.slice(0, 7)) : 0;
+    if (previousStage === 'date' && months.includes(previousMonth)) monthIndex = months.indexOf(previousMonth);
+    if (first) { chooseDate(first.local_start.slice(0, 10), {focus: false, automatic: true}); stage(previousStage); }
+    else { clearSelection(); renderCalendar(); }
+    el('availability-status').textContent = first ? '' : 'No upcoming times are available. Please check back soon.';
+  } catch { /* Submission always rechecks availability if a background refresh fails. */ }
+}
+setInterval(refreshReleasedTimes, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshReleasedTimes(); });

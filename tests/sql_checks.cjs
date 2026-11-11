@@ -26,6 +26,9 @@ const {PGlite} = require('../.test-tools/pglite/package/dist/index.cjs');
   const customMigration = fs.readFileSync('supabase/migrations/002_custom_availability.sql', 'utf8');
   await db.exec(customMigration);
   await db.exec(customMigration);
+  const trackingMigration = fs.readFileSync('supabase/migrations/003_release_and_tracking.sql', 'utf8');
+  await db.exec(trackingMigration);
+  await db.exec(trackingMigration);
   await query('insert into auth.users values($1),($2)', [admin, ordinary]);
   await query('insert into appt_private.admins values($1)', [admin]);
   check('migration executes and can be reapplied without dropping data');
@@ -147,6 +150,68 @@ const {PGlite} = require('../.test-tools/pglite/package/dist/index.cjs');
   pgaSlots = await scalar('select public.appt_public_slots($1)', [pga]);
   assert.equal(pgaSlots.length, 35);
   check('replacement preserves booked slot IDs/capacity and invalid ranges roll back without removing availability');
+
+  const releaseEvent = await scalar("select public.appt_admin_create_event('Limited show','','',2,false)");
+  await scalar("select public.appt_admin_generate_slots($1,'2099-02-10','2099-02-11','09:00','11:00',30,2,false,false)", [releaseEvent]);
+  await query('select public.appt_admin_set_release($1,3)', [releaseEvent]);
+  const referral = await scalar("select public.appt_admin_create_referral($1,'Jeff','salesperson')", [releaseEvent]);
+  const channel = await scalar("select public.appt_admin_create_referral($1,'Newsletter','channel')", [releaseEvent]);
+  const duplicate = await scalar("select public.appt_admin_create_referral($1,'Jeff','salesperson')", [releaseEvent]);
+  assert.equal(duplicate.token, referral.token);
+  await role('authenticated', ordinary);
+  await assert.rejects(query('select public.appt_admin_set_release($1,1)', [releaseEvent]), /authorized admin/);
+  await assert.rejects(query("select public.appt_admin_create_referral($1,'Intruder','channel')", [releaseEvent]), /authorized admin/);
+  await role('anon');
+  await assert.rejects(query('select * from appt_private.referral_links'), /permission denied/);
+  assert.equal(await scalar('select public.appt_ref_valid($1,$2)', [releaseEvent, referral.token]), true);
+  assert.equal(await scalar('select public.appt_ref_valid($1,$2)', [pga, referral.token]), false);
+  let released = await scalar('select public.appt_public_slots($1)', [releaseEvent]);
+  assert.equal(released.length, 10);
+  assert.equal(released.filter(slot => slot.is_open).length, 6); // Three independently on each day.
+  assert(released.every(slot => !('source_label' in slot) && !('token' in slot)));
+  await assert.rejects(query('select public.appt_book($1,$2,$3,$4,$5,$6)',
+    [released[3].id, randomUUID(), 'Guest', '', '555-0100', '']), /not yet open/);
+  await assert.rejects(query('select public.appt_book_tracked($1,$2,$3,$4,$5,$6,$7)',
+    [released[3].id, randomUUID(), 'Guest', '', '555-0100', '', referral.token]), /not yet open/);
+  check('daily release limit opens only three times per day, and neither old nor new booking endpoints can bypass it');
+  const firstRequest = randomUUID();
+  const firstReceipt = await scalar('select public.appt_book_tracked($1,$2,$3,$4,$5,$6,$7)',
+    [released[0].id, firstRequest, 'Sales lead', '', '555-0100', '', referral.token]);
+  released = await scalar('select public.appt_public_slots($1)', [releaseEvent]);
+  assert.equal(released[0].remaining, 1);
+  assert.equal(released[3].is_open, false); // Partial capacity still counts as one of the three open times.
+  await scalar('select public.appt_book_tracked($1,$2,$3,$4,$5,$6,$7)',
+    [released[0].id, randomUUID(), 'Channel lead', '', '555-0101', '', channel.token]);
+  released = await scalar('select public.appt_public_slots($1)', [releaseEvent]);
+  assert.equal(released[0].remaining, 0);
+  assert.equal(released[0].is_open, false);
+  assert.equal(released[3].is_open, true);
+  assert.equal(released.filter(slot => slot.is_open).length, 6);
+  await assert.rejects(query('select public.appt_book_tracked($1,$2,$3,$4,$5,$6,$7)',
+    [released[1].id, randomUUID(), 'Unknown lead', '', '555-0102', '', 'unknown']), /link is no longer active/);
+  await assert.rejects(query('select public.appt_book_tracked($1,$2,$3,$4,$5,$6,$7)',
+    [pgaSlots[1].id, randomUUID(), 'Wrong event', '', '555-0102', '', referral.token]), /link is no longer active/);
+  check('the next time opens only when a time fills; source tokens are validated against their event');
+  await role('authenticated', admin);
+  let tracked = await scalar('select public.appt_admin_dashboard()');
+  assert.equal(tracked.referral_links.find(link => link.id === referral.id).booking_count, 1);
+  assert.equal(tracked.referral_links.find(link => link.id === channel.id).booking_count, 1);
+  assert.equal(tracked.bookings.find(booking => booking.id === firstReceipt.id).source_label, 'Jeff');
+  assert.equal(tracked.bookings.find(booking => booking.id === firstReceipt.id).source_kind, 'salesperson');
+  await query('select public.appt_admin_set_referral($1,false)', [referral.id]);
+  await role('anon');
+  assert.equal(await scalar('select public.appt_ref_valid($1,$2)', [releaseEvent, referral.token]), false);
+  assert.deepEqual(await scalar('select public.appt_book_tracked($1,$2,$3,$4,$5,$6,$7)',
+    [released[0].id, firstRequest, 'Sales lead', '', '555-0100', '', channel.token]), firstReceipt);
+  await assert.rejects(query('select public.appt_book_tracked($1,$2,$3,$4,$5,$6,$7)',
+    [released[1].id, randomUUID(), 'Disabled lead', '', '555-0103', '', referral.token]), /link is no longer active/);
+  await role('authenticated', admin);
+  tracked = await scalar('select public.appt_admin_dashboard()');
+  assert.equal(tracked.bookings.find(booking => booking.id === firstReceipt.id).source_label, 'Jeff');
+  assert.equal(tracked.referral_links.find(link => link.id === referral.id).booking_count, 1);
+  await query('select public.appt_admin_set_release($1,null)', [releaseEvent]);
+  assert.equal((await scalar('select public.appt_public_slots($1)', [releaseEvent])).filter(slot => slot.is_open).length, 9);
+  check('source snapshots/totals are private, duplicate retries never reattribute, disabled links reject new bookings, and limits can be removed');
   await db.close();
   console.log(`${checks} SQL checks passed. PGlite serializes sessions; multi-connection load testing remains a live-project check.`);
 })().catch(error => { console.error(error.message, error.detail || '', error.where || ''); process.exit(1); });
