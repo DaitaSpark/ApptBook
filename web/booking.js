@@ -4,6 +4,25 @@ let cfg, events = [], slots = [], selectedEvent, selectedDate, selectedSlot, req
 let months = [], monthIndex = 0, loadSequence = 0, saving = false, previewData;
 const form = el('booking-form');
 const steps = [...document.querySelectorAll('[data-step]')];
+const viewTimes = document.createElement('button');
+viewTimes.id = 'view-selected-times';
+viewTimes.type = 'button';
+viewTimes.className = 'mobile-date-action';
+viewTimes.hidden = true;
+document.querySelector('.calendar-panel').append(viewTimes);
+function showTimes() {
+  if (saving || !selectedDate) return;
+  stage('time');
+  if (matchMedia('(max-width: 720px)').matches)
+    document.querySelector('.slot-panel').scrollIntoView({block: 'nearest', behavior: 'instant'});
+  el('day-times').querySelector('button')?.focus({preventScroll: true});
+}
+viewTimes.addEventListener('click', showTimes);
+el('change-date').addEventListener('click', () => {
+  if (saving) return;
+  stage('date');
+  document.querySelector('.calendar-day.selected')?.focus({preventScroll: true});
+});
 const eventParameters = new URLSearchParams(location.search);
 const hasLinkedEvent = eventParameters.has('event');
 const showEvents = eventParameters.get('showEvents') === 'true';
@@ -31,6 +50,7 @@ function stage(value) {
 }
 function clearSelection() {
   selectedDate = selectedSlot = requestId = null;
+  viewTimes.hidden = true;
   form.hidden = true;
   el('book-button').disabled = true;
   el('details-placeholder').hidden = false;
@@ -77,6 +97,8 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
   if (saving && !automatic) return;
   clearSelection();
   selectedDate = day;
+  viewTimes.textContent = `View times for ${dayLabel(day, {month: 'short', day: 'numeric'})} →`;
+  viewTimes.hidden = false;
   renderCalendar();
   el('chosen-date').textContent = dayLabel(day);
   el('time-placeholder').hidden = true;
@@ -95,8 +117,8 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
     times.append(button);
   }
   steps.find(button => button.dataset.step === 'time').disabled = false;
-  stage('time');
-  if (focus) times.querySelector('button')?.focus({preventScroll: true});
+  stage(automatic ? 'date' : 'time');
+  if (!automatic && focus) showTimes();
 }
 function chooseTime(slot, button) {
   if (saving) return;
