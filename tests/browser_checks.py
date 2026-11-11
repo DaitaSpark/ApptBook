@@ -116,6 +116,7 @@ with sync_playwright() as playwright:
         page.goto(URL)
         page.locator('.has-availability').first.wait_for(state='attached')
         assert page.locator('#day-times').is_visible()
+        assert page.locator('.calendar-panel').is_visible()
         assert page.locator('.calendar-day.selected').get_attribute('data-date') == '2099-01-05'
         assert not page.locator('#booking-form').is_visible()
         page.locator('[data-step="date"]').click()
@@ -210,6 +211,11 @@ with sync_playwright() as playwright:
         assert page.locator('#event-choice').is_disabled()
         assert page.locator('#event-choice option').count() == 1
         assert page.locator('#event-name').inner_text() == 'PGA Show'
+        assert page.locator('#event-name').evaluate('(node) => node.tagName') == 'H1'
+        title_size = page.locator('#event-name').evaluate('(node) => parseFloat(getComputedStyle(node).fontSize)')
+        kicker_size = page.locator('.booking-kicker').evaluate('(node) => parseFloat(getComputedStyle(node).fontSize)')
+        assert title_size >= kicker_size * 2.5
+        assert page.locator('.calendar-panel').is_visible()
         assert page.locator('.has-availability').count() == 3
         assert page.locator('#month-label').inner_text() == 'January 2099'
         assert page.locator('#next-month').is_disabled()
@@ -221,7 +227,17 @@ with sync_playwright() as playwright:
         page.locator('.has-availability').first.click()
         assert page.locator('[data-slot]').count() == 14
         times = page.locator('#day-times').bounding_box()
-        assert times['y'] + times['height'] < height - 10, (width, 'times', times)
+        if width > 720:
+            assert times['y'] + times['height'] < height - 10, (width, 'times', times)
+        else:
+            # Mobile now shows the real calendar and times together rather than hiding dates.
+            # The full list may scroll on shorter phones; dates must remain immediately accessible.
+            assert page.locator('.calendar-panel').is_visible()
+            page.locator('.calendar-day[data-date="2099-01-29"]').click()
+            assert page.locator('[data-slot]').count() == 6
+            assert page.locator('.calendar-day.selected').get_attribute('data-date') == '2099-01-29'
+            page.locator('.calendar-day[data-date="2099-01-27"]').click()
+            assert page.locator('[data-slot]').count() == 14
         assert page.locator('#day-times').evaluate('(node) => node.scrollHeight <= node.clientHeight + 1')
         page.locator('[data-slot]').first.click()
         button = page.locator('#book-button').bounding_box()
@@ -239,7 +255,7 @@ with sync_playwright() as playwright:
         page.locator('.has-availability').first.wait_for(state='attached')
         assert page.locator('#event-name').inner_text() == 'PGA Show'
         assert not page.locator('#event-picker').is_visible()
-        print(f'PASS {width}x{height}: scoped PGA link, all 14 times and confirmation above fold, no default-calendar navigation')
+        print(f'PASS {width}x{height}: prominent event heading, visible calendar with default times, date switching, scoped navigation')
         page.close()
 
     for event_id in ['missing-event', '']:

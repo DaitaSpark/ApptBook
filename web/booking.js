@@ -125,6 +125,7 @@ async function loadSlots(eventId) {
   if (showEvents) updateBookingLinks(String(selectedEvent.id));
   el('event-name').textContent = selectedEvent.name;
   el('event-location').textContent = selectedEvent.location || '';
+  el('event-bar').hidden = !selectedEvent.location && el('event-picker').hidden;
   el('event-description').textContent = selectedEvent.description || '';
   const today = localTimestamp(new Date().toISOString());
   try {
