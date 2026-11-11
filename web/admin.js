@@ -28,7 +28,7 @@ async function dashboard() {
     details.append(link);
     for (const slot of eventSlots) {
       const line = document.createElement('p');
-      line.textContent = `${dateFormat(slot.starts_at)} — ${slot.reserved} / ${slot.capacity} booked`;
+      line.textContent = `${dateFormat(slot.starts_at)} – ${eastern(slot.ends_at, {timeStyle: 'short'})} — ${slot.reserved} / ${slot.capacity} booked`;
       details.append(line);
     }
     availability.append(details);
@@ -80,11 +80,38 @@ mutation('slot-form', async values => {
     p_end: `${values.date}T${values.end}:00`, p_capacity: values.capacity ? Number(values.capacity) : null}, true);
   return 'Time slot added.';
 });
-mutation('workdays-form', async values => {
-  const count = await rpc('appt_admin_add_workdays', {p_event_id: values.event_id,
-    p_first: values.first_date, p_last: values.last_date}, true);
-  return `Added ${count} weekday slots. Existing availability was preserved.`;
+mutation('range-form', async values => {
+  let result;
+  try {
+    result = await rpc('appt_admin_generate_slots', {p_event_id: values.event_id,
+      p_first: values.first_date, p_last: values.last_date, p_first_start: values.first_start,
+      p_last_start: values.last_start, p_minutes: Number(values.minutes),
+      p_capacity: values.capacity ? Number(values.capacity) : null,
+      p_weekdays: Boolean(values.weekdays), p_replace: Boolean(values.replace)}, true);
+  } catch (error) {
+    if (error.code === 'PGRST202') throw new Error('Run database update 002_custom_availability.sql in Supabase SQL Editor to enable custom time slots.');
+    throw error;
+  }
+  el('range-form').elements.replace.checked = false;
+  return `Created ${result.added} meeting slots. Replaced ${result.removed} unbooked slots. ` +
+    `${result.preserved} slots with bookings preserved. ${result.conflicts} overlapping times skipped.`;
 });
+function rangeSummary() {
+  const form = el('range-form');
+  const asMinutes = value => { const [hours, minutes] = value.split(':').map(Number); return hours * 60 + minutes; };
+  const first = asMinutes(form.elements.first_start.value), last = asMinutes(form.elements.last_start.value);
+  const length = Number(form.elements.minutes.value);
+  if (!Number.isFinite(first + last) || !Number.isInteger(length) || length < 5 || last < first || (last - first) % length || last + length >= 1440) {
+    el('range-summary').textContent = 'Choose aligned first and last start times and a meeting length that ends before midnight.';
+    return;
+  }
+  const finish = last + length;
+  const hour = Math.floor(finish / 60);
+  const endLabel = `${hour % 12 || 12}:${String(finish % 60).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
+  el('range-summary').textContent = `${(last - first) / length + 1} meetings per selected day. The last meeting ends at ${endLabel} Eastern.`;
+}
+el('range-form').addEventListener('input', rangeSummary);
+rangeSummary();
 el('sign-out').addEventListener('click', async () => {
   await signOut(); location.reload();
 });

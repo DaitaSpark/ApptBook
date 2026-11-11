@@ -70,6 +70,8 @@ def mocked(page, mode='success'):
             data = 14
         elif path == 'appt_admin_add_slot':
             data = NEXT
+        elif path == 'appt_admin_generate_slots':
+            data = {'added': 28, 'removed': 2, 'preserved': 0, 'conflicts': 0}
         else:
             raise AssertionError(f'Unexpected request: {request.url}')
         route.fulfill(status=status, json=data, headers={'Access-Control-Allow-Origin': '*'})
@@ -170,6 +172,21 @@ with sync_playwright() as playwright:
     page.wait_for_function("document.getElementById('message').textContent.includes('created')")
     creation = next(body for path, body in calls if path == 'appt_admin_create_event')
     assert creation['p_workdays'] and creation['p_capacity'] == 1
+    page.locator('#range-form [name="event_id"]').select_option(EVENT)
+    page.locator('#range-form [name="first_date"]').fill('2027-01-27')
+    page.locator('#range-form [name="last_date"]').fill('2027-01-28')
+    page.locator('#range-form [name="last_start"]').fill('15:30')
+    assert '14 meetings per selected day' in page.locator('#range-summary').inner_text()
+    assert '4:00 PM' in page.locator('#range-summary').inner_text()
+    page.locator('#range-form [name="replace"]').check()
+    page.locator('#range-form button').click()
+    page.wait_for_function("document.getElementById('message').textContent.includes('Created 28')")
+    generated = next(body for path, body in calls if path == 'appt_admin_generate_slots')
+    assert generated['p_last_start'] == '15:30' and generated['p_replace'] is True
+    assert generated['p_capacity'] is None
+    assert not page.locator('#range-form [name="replace"]').is_checked()
+    page.locator('#admin-availability details').first.locator('summary').click()
+    assert '9:30 AM' in page.locator('#admin-availability').inner_text()
     with page.expect_download() as download:
         page.locator('#export').click()
     csv = Path(download.value.path()).read_text(encoding='utf-8-sig')

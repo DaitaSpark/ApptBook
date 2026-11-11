@@ -16,7 +16,7 @@ Open http://127.0.0.1:5000. This **read-only local preview** exports public avai
 ## Connect Supabase
 
 1. Create/select the dedicated project for ApptBook. Do not change BevStats's project without confirming the intended sharing.
-2. In SQL Editor, run `supabase/migrations/001_appointments.sql`. It creates an isolated `appt_private` schema, not public customer tables. It can be reapplied without deleting data.
+2. In SQL Editor, run `supabase/migrations/001_appointments.sql`, then `supabase/migrations/002_custom_availability.sql`. They create an isolated `appt_private` schema and custom-hour scheduling functions, not public customer tables. They can be reapplied without deleting data. If 001 is already installed, run only 002 for the custom-hour controls.
 3. Choose initial data:
    - For a fresh schedule, run `supabase/seed.sql` to create JR & Co. Appointments with the next 30 days of weekday availability, 9 a.m. to 4 p.m. Eastern, 30-minute slots, capacity 1. Past times are omitted; holidays are included.
    - To preserve local schedules/bookings, run `python scripts/export_legacy.py`, then run the ignored `supabase/import-legacy.sql` **instead of seed.sql**. The import requires empty appointment tables and refuses to overwrite existing data. It may contain guest information; never commit/publish it. Imported bookings do not automatically trigger new messages or calendar entries.
@@ -31,6 +31,14 @@ values ('REPLACE_WITH_AUTH_USER_UUID') on conflict do nothing;
 6. Open `/admin.html` and sign in. The database checks allowlist membership on every admin operation. An authenticated non-admin cannot manage or export bookings. Admin sessions use sessionStorage and are refreshed when needed; signing out clears them.
 
 The browser calls only the allowed RPC functions. Public roles cannot read the private schema, guest records, or delivery queue. All tables also have RLS enabled. Keep `appt_private` out of Supabase's exposed schemas. Do not grant browser roles private-schema privileges.
+
+### Specific event dates and custom hours
+
+Create an event with the default 30-day availability checkbox unchecked, then use **Create time slots**. Set a date range, first meeting start, **last meeting start**, meeting length (default 30 minutes), and capacity (blank uses the event default). Weekdays-only is optional. A preview states the number of meetings per day and when the final meeting ends. The separate **Add one individual meeting** form creates one appointment spanning its start/end, not a series of half-hour slots.
+
+Example: PGA Show January 27-29, 2027, with last starts at 3:30 p.m. on Jan 27-28 and 11:30 a.m. on Jan 29. Generate Jan 27-28 from 09:00 through 15:30 (14 meetings/day), then Jan 29 from 09:00 through 11:30 (6 meetings), totaling 34 time slots. Each event's **Open booking page** link selects only its availability and opens the first available month automatically.
+
+For correcting existing availability, **Replace unbooked slots on these dates** removes all unbooked slots for that event on those dates (including outside the new hours) before generating the new series. Booked slots retain their IDs, times, capacity, and reservations; overlaps are skipped and reported. Other dates and events are untouched. The option resets after a successful generation. Admin availability displays both start and end times. Applying migration 002 alone never changes a live schedule.
 
 ## Render: create a Static Site
 
