@@ -28,7 +28,7 @@ Set SMTP_HOST, SMTP_PORT (STARTTLS, normally 587), SMTP_USERNAME, SMTP_PASSWORD 
 - Eastern Time uses America/New_York, automatically observing EST/EDT. Admins enter local Eastern times; ambiguous/nonexistent DST transition hours are rejected.
 - An atomic conditional database update reserves capacity inside the same transaction as the booking, preventing oversubscription.
 - Admin forms and bookings have CSRF protection; admin sessions use HTTP-only cookies. HTTPS cookies are enabled on Render.
-- Initial branding is provisional until JR & Co. brand references are supplied.
+- Branding uses the official logo, product photography, Assistant and Barlow fonts, and neutral colors from jrcogolf.com. Asset sources are documented in static/brand/SOURCES.md.
 - Initial version supports creating events and slots, viewing bookings and exporting them. Editing/deleting availability, cancellations, rescheduling, reminders, recurring schedules, external calendar sync, and group bookings are not implemented.
 - Before public launch, add infrastructure rate limiting for login and booking endpoints, decide retention/privacy rules, and configure database backups. Schema changes after this initial version should use migrations rather than create_all.
 
