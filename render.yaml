@@ -1,27 +1,36 @@
 services:
   - type: web
     name: jrco-appointments
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    preDeployCommand: flask --app app init-db
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
-    healthCheckPath: /health
+    runtime: static
+    buildCommand: python build_static.py
+    staticPublishPath: dist
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /config.json
+        name: Cache-Control
+        value: no-store
+      - path: /admin.html
+        name: Cache-Control
+        value: no-store
+    routes:
+      - type: redirect
+        source: /admin
+        destination: /admin.html
+      - type: redirect
+        source: /admin/login
+        destination: /admin.html
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.10
-      - key: SECRET_KEY
-        generateValue: true
-      - key: ADMIN_PASSWORD
+      - key: SUPABASE_URL
         sync: false
-      - key: DATABASE_URL
-        sync: false
-      - key: SMTP_HOST
-        sync: false
-      - key: SMTP_PORT
-        value: 587
-      - key: SMTP_USERNAME
-        sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      - key: MAIL_FROM
+      - key: SUPABASE_PUBLISHABLE_KEY
         sync: false

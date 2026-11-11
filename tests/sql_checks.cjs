@@ -1,0 +1,115 @@
+// Actual PostgreSQL execution using the local-only PGlite WASM engine.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const {randomUUID} = require('node:crypto');
+const {PGlite} = require('../.test-tools/pglite/package/dist/index.cjs');
+
+(async () => {
+  const db = new PGlite();
+  let checks = 0;
+  const admin = randomUUID(), ordinary = randomUUID();
+  const query = async (sql, args = []) => (await db.query(sql, args)).rows;
+  const scalar = async (sql, args = []) => Object.values((await query(sql, args))[0])[0];
+  async function role(name, user = '') {
+    await db.exec('reset role');
+    await query("select set_config('request.jwt.claim.sub', $1, false)", [user]);
+    await db.exec(`set role ${name}`);
+  }
+  const check = description => { checks++; console.log(`PASS ${description}`); };
+  await db.exec(`create role anon; create role authenticated; create role service_role;
+    create schema auth; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql as $$
+      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;`);
+  const migration = fs.readFileSync('supabase/migrations/001_appointments.sql', 'utf8');
+  await db.exec(migration);
+  await db.exec(migration);
+  await query('insert into auth.users values($1),($2)', [admin, ordinary]);
+  await query('insert into appt_private.admins values($1)', [admin]);
+  check('migration executes and can be reapplied without dropping data');
+
+  await role('anon');
+  assert.deepEqual(await scalar('select public.appt_public_events()'), []);
+  await assert.rejects(query('select * from appt_private.bookings'), /permission denied/);
+  await assert.rejects(query('select public.appt_admin_dashboard()'), /permission denied/);
+  await assert.rejects(query("select public.appt_claim_jobs(array['email'])"), /permission denied/);
+  check('anonymous users cannot read private tables, admin data, or delivery jobs');
+  await role('authenticated', ordinary);
+  await assert.rejects(query('select public.appt_admin_dashboard()'), /authorized admin/);
+  await assert.rejects(query("select public.appt_admin_create_event('Intruder','','',1,false)"), /authorized admin/);
+  await assert.rejects(query("select public.appt_claim_jobs(array['email'])"), /permission denied/);
+  check('signing in without the admin allowlist grants no management access');
+
+  await role('authenticated', admin);
+  const eventId = await scalar("select public.appt_admin_create_event('JR Golf','','Office',1,false)");
+  const monday = new Date('2099-01-01T12:00:00Z');
+  while (monday.getUTCDay() !== 1) monday.setUTCDate(monday.getUTCDate() + 1);
+  const first = monday.toISOString().slice(0, 10);
+  const nextMonday = new Date(monday); nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
+  const last = nextMonday.toISOString().slice(0, 10);
+  assert.equal(await scalar('select public.appt_admin_add_workdays($1,$2,$3)', [eventId, first, last]), 84);
+  assert.equal(await scalar('select public.appt_admin_add_workdays($1,$2,$3)', [eventId, first, last]), 0);
+  const dashboard = await scalar('select public.appt_admin_dashboard()');
+  assert.equal(dashboard.slots.length, 84);
+  assert(dashboard.slots.every(slot => slot.capacity === 1));
+  assert.equal(new Date(dashboard.slots[0].starts_at).getUTCHours(), 14); // 9 a.m. EST
+  assert.equal(new Date(dashboard.slots[13].ends_at).getUTCHours(), 21); // 4 p.m. EST
+  check('weekday generator creates 14 half-hour slots per weekday, skips weekends, and is idempotent');
+  await assert.rejects(query('select public.appt_admin_add_slot($1,$2,$3,1)', [eventId, `${first}T09:15`, `${first}T10:15`]), /overlaps/);
+  await assert.rejects(query('select public.appt_admin_add_workdays($1,$2,$3)', [eventId, last, first]), /valid date range/);
+  await assert.rejects(query("select public.appt_admin_add_slot($1,'2030-03-10 02:30','2030-03-10 03:30',1)", [eventId]), /daylight saving/);
+  await assert.rejects(query("select public.appt_admin_add_slot($1,'2030-11-03 01:30','2030-11-03 02:30',1)", [eventId]), /daylight saving/);
+  check('overlaps, reversed ranges, and ambiguous/nonexistent Eastern times are rejected');
+
+  const slotId = dashboard.slots[0].id;
+  const requestId = randomUUID();
+  const args = [slotId, requestId, 'A Guest', '', '555-0100', 'Private note'];
+  await role('anon');
+  await assert.rejects(query('select public.appt_book($1,$2,$3,$4,$5,$6)', [slotId, randomUUID(), 'A Guest', '', '', '']), /email address or phone/);
+  await assert.rejects(query('select public.appt_book($1,$2,$3,$4,$5,$6)', [slotId, randomUUID(), 'A Guest', 'bad-email', '', '']), /email address or phone/);
+  const receipt = await scalar('select public.appt_book($1,$2,$3,$4,$5,$6)', args);
+  assert(receipt.id);
+  assert.deepEqual(await scalar('select public.appt_book($1,$2,$3,$4,$5,$6)', args), receipt);
+  await assert.rejects(query('select public.appt_book($1,$2,$3,$4,$5,$6)', [slotId, requestId, 'Different guest', '', '555-0100', '']), /different details/);
+  const competing = await Promise.allSettled(Array.from({length: 8}, () =>
+    query('select public.appt_book($1,$2,$3,$4,$5,$6)', [slotId, randomUUID(), 'Other guest', '', '555-0100', ''])));
+  assert(competing.every(result => result.status === 'rejected' && /no longer available/.test(result.reason.message)));
+  check('contact validation, idempotent retries, request conflicts, and capacity rejection execute in PostgreSQL');
+  const publicSlots = await scalar('select public.appt_public_slots($1)', [eventId]);
+  assert.equal(publicSlots.find(slot => slot.id === slotId).remaining, 0);
+  assert(publicSlots.every(slot => !('name' in slot) && !('email' in slot) && !('phone' in slot) && !('notes' in slot)));
+  check('public availability reveals remaining capacity but no guest data');
+  await role('authenticated', admin);
+  const saved = await scalar('select public.appt_admin_dashboard()');
+  assert.equal(saved.booking_count, 1);
+  assert.equal(saved.bookings[0].notes, 'Private note');
+  assert.equal(saved.slots.find(slot => slot.id === slotId).reserved, 1);
+  await scalar('select public.appt_admin_add_workdays($1,$2,$3)', [eventId, first, last]);
+  assert.equal((await scalar('select public.appt_admin_dashboard()')).slots.find(slot => slot.id === slotId).reserved, 1);
+  check('admin reporting works and regeneration preserves reserved places');
+
+  await role('service_role');
+  const jobs = await scalar("select public.appt_claim_jobs(array['calendar'],5)");
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].booking.id, receipt.id);
+  assert.deepEqual(await scalar("select public.appt_claim_jobs(array['calendar'],5)"), []);
+  await query('select public.appt_finish_job($1,$2,null)', [jobs[0].id, randomUUID()]);
+  await role('authenticated', admin);
+  assert.equal((await scalar('select public.appt_admin_dashboard()')).bookings[0].calendar_status, 'processing');
+  await role('service_role');
+  await query('select public.appt_finish_job($1,$2,null)', [jobs[0].id, jobs[0].lease_token]);
+  const emailJob = (await scalar("select public.appt_claim_jobs(array['email'],5)"))[0];
+  await query('select public.appt_finish_job($1,$2,$3)', [emailJob.id, emailJob.lease_token, 'Provider unavailable']);
+  await db.exec('reset role');
+  const states = await query('select kind,state,available_at > now() as delayed from appt_private.jobs order by kind');
+  assert.equal(states[0].state, 'sent');
+  assert.equal(states[1].state, 'queued');
+  assert(states[1].delayed);
+  assert.equal(await scalar('select count(*)::integer from appt_private.bookings'), 1);
+  check('worker leases prevent double claims; acknowledgments require lease tokens; failures retry without losing bookings');
+
+  await db.exec(fs.readFileSync('supabase/seed.sql', 'utf8'));
+  assert.equal(await scalar('select count(*)::integer from appt_private.events'), 1);
+  check('initial seeding leaves existing schedules intact');
+  await db.close();
+  console.log(`${checks} SQL checks passed. PGlite serializes sessions; multi-connection load testing remains a live-project check.`);
+})().catch(error => { console.error(error.message, error.detail || '', error.where || ''); process.exit(1); });

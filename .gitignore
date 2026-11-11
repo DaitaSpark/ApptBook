@@ -2,4 +2,11 @@
 __pycache__/
 instance/
 .env
+.env.*
+!.env.example
 *.pyc
+dist/
+.test-tools/
+supabase-public.json
+supabase/import-legacy.sql
+*.local.json

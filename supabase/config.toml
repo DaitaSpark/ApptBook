@@ -1,0 +1,3 @@
+[functions.dispatch-bookings]
+verify_jwt = false
+# The function explicitly validates x-dispatch-secret. It is never called from the browser.
