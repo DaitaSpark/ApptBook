@@ -37,3 +37,5 @@ Set SMTP_HOST, SMTP_PORT (STARTTLS, normally 587), SMTP_USERNAME, SMTP_PASSWORD 
 ```powershell
 .venv\Scripts\python -m unittest discover -s tests -v
 ```
+
+The public homepage opens directly to a monthly availability calendar. Select a date to reveal times, then a time to reveal contact details. Desktop uses adjacent panels; mobile shows the active step with back-navigation through Date / Time / Your details. Multiple people/events can be selected without leaving the booking homepage. Optional notes expand on request.

@@ -1,4 +1,5 @@
 import csv
+import calendar
 import io
 import os
 import secrets
@@ -123,16 +124,28 @@ def create_app(config=None):
 
     @app.get('/')
     def index():
-        return render_template('index.html', events=db.session.scalars(select(Event).order_by(Event.name)).all())
+        events = db.session.scalars(select(Event).order_by(Event.name)).all()
+        selected_id = request.args.get('event', type=int)
+        event = next((event for event in events if event.id == selected_id), events[0] if events else None)
+        return render_template('index.html', events=events, **booking_context(event))
+
+    def booking_context(event):
+        dates = {}
+        current = datetime.now(EASTERN).replace(tzinfo=None)
+        for slot in event.slots if event else []:
+            if slot.starts_at > current:
+                dates.setdefault(slot.starts_at.date(), []).append(slot)
+        month_keys = sorted({(day.year, day.month) for day in dates}) or [(current.year, current.month)]
+        months = [{'label': date(year, month, 1).strftime('%B %Y'),
+                   'weeks': calendar.Calendar().monthdatescalendar(year, month), 'number': month}
+                  for year, month in month_keys]
+        return {'event': event, 'dates': dates, 'months': months}
 
     @app.get('/events/<int:event_id>')
     def event_page(event_id):
         event = db.get_or_404(Event, event_id)
-        dates = {}
-        for slot in event.slots:
-            if slot.starts_at > datetime.now(EASTERN).replace(tzinfo=None):
-                dates.setdefault(slot.starts_at.date(), []).append(slot)
-        return render_template('event.html', event=event, dates=dates)
+        events = db.session.scalars(select(Event).order_by(Event.name)).all()
+        return render_template('event.html', events=events, **booking_context(event))
 
     @app.post('/slots/<int:slot_id>/book')
     def book(slot_id):

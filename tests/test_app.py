@@ -159,6 +159,29 @@ class BookingTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(db.session.query(Slot).filter_by(event_id=self.event_id).count(), 15)
 
+    def test_homepage_calendar_and_event_selection(self):
+        with self.app.app_context():
+            other = Event(name='Another person', default_capacity=1)
+            db.session.add(other)
+            db.session.flush()
+            start = datetime.now(EASTERN).replace(tzinfo=None) + timedelta(days=10)
+            slot = Slot(event_id=other.id, starts_at=start, ends_at=start + timedelta(minutes=30), capacity=1)
+            db.session.add(slot)
+            db.session.commit()
+            other_id, other_slot = other.id, slot.id
+        first = self.client.get(f'/?event={self.event_id}').get_data(as_text=True)
+        self.assertIn('class="calendar-grid"', first)
+        self.assertIn(f'data-slot="{self.slot_id}"', first)
+        self.assertNotIn(f'data-slot="{other_slot}"', first)
+        second = self.client.get(f'/?event={other_id}').get_data(as_text=True)
+        self.assertIn(f'data-slot="{other_slot}"', second)
+        self.assertNotIn(f'data-slot="{self.slot_id}"', second)
+        with self.app.app_context():
+            db.session.get(Slot, other_slot).reserved = 1
+            db.session.commit()
+        full = self.client.get(f'/?event={other_id}').get_data(as_text=True)
+        self.assertNotIn(f'data-slot="{other_slot}"', full)
+
 
 if __name__ == '__main__':
     unittest.main()
