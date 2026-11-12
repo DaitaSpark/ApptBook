@@ -1,4 +1,4 @@
-import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar} from './delivery.js';
+import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar, inspectCalendar} from './delivery.js';
 
 const secrets = Object.fromEntries(['DISPATCH_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
   'RESEND_API_KEY', 'MAIL_FROM', 'TEAM_EMAIL', 'WORKSPACE_EMAIL', 'GOOGLE_CLIENT_ID',
@@ -34,13 +34,34 @@ Deno.serve(async request => {
       try {
         if (job.kind === 'email') await deliverEmail(job.booking, secrets, token, requestWithTimeout);
         else if (job.kind === 'calendar_delete') await removeCalendar(job.booking, secrets, token, requestWithTimeout);
-        else if (job.kind === 'calendar') await deliverCalendar(job.booking, secrets, token, requestWithTimeout);
+        else if (job.kind === 'calendar') {
+          await deliverCalendar(job.booking, secrets, token, requestWithTimeout);
+          await rpc('appt_calendar_delivered', {p_id: job.booking.id, p_calendar_id: secrets.GOOGLE_CALENDAR_ID});
+        }
         else throw new Error('Unsupported delivery job.');
         delivered++;
       } catch (error) { errorText = error instanceof Error ? error.message : 'Delivery failed.'; }
       await rpc('appt_finish_job', {p_id: job.id, p_lease_token: job.lease_token, p_error: errorText});
     }
-    return Response.json({processed: jobs.length, delivered});
+    let audited = 0, auditFailed = false;
+    if (googleConfigured && secrets.GOOGLE_CALENDAR_ID) {
+      try {
+        const due = await rpc('appt_claim_calendar_audit', {p_calendar_id: secrets.GOOGLE_CALENDAR_ID, p_limit: 10});
+        // Small parallel batches keep audits within the function's runtime limit.
+        for (let index = 0; index < due.length; index += 5) {
+          const results = await Promise.allSettled(due.slice(index, index + 5).map(async (item: any) => {
+            let result;
+            try { result = await inspectCalendar(item.booking, secrets, token, item.verified, requestWithTimeout); }
+            catch { result = {outcome: 'error', verified: false, differences: ['Google Calendar could not be checked; no booking changes were made.']}; }
+            await rpc('appt_finish_calendar_audit', {p_id: item.booking.id, p_lease_token: item.lease_token,
+              p_outcome: result.outcome, p_verified: result.verified, p_differences: result.differences});
+            audited++;
+          }));
+          if (results.some(result => result.status === 'rejected')) auditFailed = true;
+        }
+      } catch { auditFailed = true; }
+    }
+    return Response.json({processed: jobs.length, delivered, audited, audit_failed: auditFailed});
   } catch {
     // Do not expose provider responses, mailbox contents, or credentials in logs/responses.
     return Response.json({error: 'Delivery worker unavailable. Saved bookings remain queued for retry.'}, {status: 503});

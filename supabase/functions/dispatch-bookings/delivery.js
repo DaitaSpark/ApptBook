@@ -50,12 +50,9 @@ export async function deliverEmail(booking, secrets, token, request = fetch) {
   }
 }
 
-export async function deliverCalendar(booking, secrets, token, request = fetch) {
+export const calendarPayload = booking => {
   const eventId = 'appt' + booking.id.replaceAll('-', '');
-  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(secrets.GOOGLE_CALENDAR_ID)}/events`;
-  const headers = {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'};
-  const response = await request(`${url}?sendUpdates=none`, {method: 'POST', headers,
-    body: JSON.stringify({id: eventId, summary: `${booking.event_name} — ${booking.name}`,
+  return {id: eventId, summary: `${booking.event_name} — ${booking.name}`,
       location: booking.location, description: [booking.name, booking.email, booking.phone,
         booking.company ? `Company / Golf Course: ${booking.company}` : '',
         `Source: ${booking.source_label || 'Direct / untracked'}${booking.source_label && booking.source_kind ? ` (${booking.source_kind})` : ''}`,
@@ -63,7 +60,15 @@ export async function deliverCalendar(booking, secrets, token, request = fetch) 
         `Booking reference: ${booking.id}`].filter(Boolean).join('\n'),
       start: {dateTime: booking.starts_at, timeZone: 'America/New_York'},
       end: {dateTime: booking.ends_at, timeZone: 'America/New_York'},
-      extendedProperties: {private: {appt_booking_id: booking.id}}})});
+      extendedProperties: {private: {appt_booking_id: booking.id}}};
+};
+
+export async function deliverCalendar(booking, secrets, token, request = fetch) {
+  const eventId = 'appt' + booking.id.replaceAll('-', '');
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(secrets.GOOGLE_CALENDAR_ID)}/events`;
+  const headers = {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'};
+  const response = await request(`${url}?sendUpdates=none`, {method: 'POST', headers,
+    body: JSON.stringify(calendarPayload(booking))});
   if (response.status === 409) {
     const existing = await checked(await request(`${url}/${eventId}`, {headers}), 'Calendar verification');
     if ((await existing.json()).extendedProperties?.private?.appt_booking_id !== booking.id)
@@ -82,4 +87,36 @@ export async function removeCalendar(booking, secrets, token, request = fetch) {
     throw new Error('Calendar event ID conflict.');
   const response = await request(`${url}?sendUpdates=none`, {method: 'DELETE', headers});
   if (![404, 410].includes(response.status)) await checked(response, 'Calendar removal');
+}
+
+// Only explicit Google cancellation of a verified app entry releases a place.
+// Missing entries and permission failures are audit issues, never cancellations.
+export async function inspectCalendar(booking, secrets, token, verified, request = fetch) {
+  const expected = calendarPayload(booking);
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(secrets.GOOGLE_CALENDAR_ID)}/events/${expected.id}`;
+  const response = await request(url, {headers: {Authorization: `Bearer ${token}`}});
+  const result = (outcome, differences = [], owned = false) => ({outcome, differences, verified: owned});
+  if ([404,410].includes(response.status)) return result('missing', ['Calendar entry not found; review manually. No booking was cancelled.']);
+  await checked(response, 'Calendar audit');
+  const actual = await response.json();
+  if (actual.id !== expected.id) return result('error', ['Calendar event ID does not match.']);
+  const owner = actual.extendedProperties?.private?.appt_booking_id;
+  if (owner && owner !== booking.id) return result('error', ['Calendar entry belongs to another booking.']);
+  if (actual.status === 'cancelled') {
+    return verified ? result('cancelled', ['Cancelled in Google Calendar.'], true) :
+      result('missing', ['Google cancellation found before ownership could be verified; review manually.']);
+  }
+  if (owner !== booking.id) return result('error', ['Booking reference metadata is missing; review manually.']);
+  const differences = [];
+  for (const [field, label] of [['start','Start'],['end','End']]) {
+    const value = actual[field]?.dateTime;
+    if (!value || new Date(value).getTime() !== new Date(expected[field].dateTime).getTime())
+      differences.push(`${label} differs: app ${expected[field].dateTime}; Google ${value || actual[field]?.date || 'not set'}.`);
+  }
+  for (const [field,label] of [['summary','Title'],['location','Location'],['description','Contact / company / source / notes']]) {
+    const normalize = value => String(value || '').replaceAll('\r\n','\n').trim();
+    if (normalize(actual[field]) !== normalize(expected[field])) differences.push(`${label} differs.`);
+  }
+  if (actual.recurrence?.length || actual.recurringEventId) differences.push('Google entry is recurring; app booking is a single meeting.');
+  return result(differences.length ? 'changed' : 'ok', differences, true);
 }

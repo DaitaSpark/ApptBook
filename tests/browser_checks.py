@@ -86,6 +86,14 @@ def mocked(page, mode='success'):
                 if state['booking_deleted']:
                     data['bookings'] = []
                     data['booking_count'] = 0
+        elif path == 'appt_admin_calendar_audit':
+            data = {'last_checked': '2026-11-12T15:00:00Z', 'pending': 0, 'issues': [
+                {'id': SLOT, 'name': '<img src=x onerror=alert(1)>', 'event_name': 'PGA Show',
+                 'starts_at': SLOTS[0]['starts_at'], 'checked_at': '2026-11-12T15:00:00Z',
+                 'outcome': 'changed', 'differences': ['Start differs: app 9 AM; Google 10 AM.']},
+                {'id': NEXT, 'name': 'Cancelled guest', 'event_name': 'PGA Show',
+                 'starts_at': SLOTS[0]['starts_at'], 'checked_at': '2026-11-12T15:00:00Z',
+                 'outcome': 'cancelled', 'differences': ['Cancelled in Google Calendar.']}]}
         elif path == 'appt_admin_bookings':
             data = [{'name': '=1+1', 'email': 'guest@example.com', 'event_name': EVENTS[0]['name'], 'source_label': 'Jeff', 'source_kind': 'salesperson',
                      'starts_at': SLOTS[0]['starts_at']}]
@@ -451,6 +459,9 @@ with sync_playwright() as playwright:
     page.locator('[name="password"]').fill('test-only')
     page.locator('#sign-in').click()
     page.locator('#admin-workspace').wait_for(state='visible')
+    page.get_by_text('Start differs: app 9 AM; Google 10 AM.', exact=True).wait_for()
+    assert page.locator('#calendar-audit-issues img').count() == 0
+    assert 'place released' in page.locator('#calendar-audit-issues').inner_text()
     assert page.locator('#all-calendars-link').get_attribute('href') == '/?showEvents=true'
     assert page.locator('#bookings-table img').count() == 0
     assert '<img' in page.locator('#bookings-table').inner_text()

@@ -18,6 +18,7 @@ environment = {...environment, RESEND_API_KEY: 'provider-only', MAIL_FROM: 'appo
 const acknowledgments = [];
 globalThis.fetch = async (url, init) => {
   calls.push(url);
+  if (url.endsWith('/appt_claim_calendar_audit')) return Response.json([]);
   if (url.endsWith('/appt_claim_jobs')) {
     assert.equal(init.headers.Authorization, 'Bearer server-only');
     assert.deepEqual(JSON.parse(init.body).p_kinds, ['email']);
@@ -46,6 +47,7 @@ environment = {...environment, GOOGLE_CLIENT_ID: 'client', GOOGLE_CLIENT_SECRET:
 const cleanup = [];
 globalThis.fetch = async (url, init) => {
   if (url === 'https://oauth2.googleapis.com/token') return Response.json({access_token: 'google-token'});
+  if (url.endsWith('/appt_claim_calendar_audit')) return Response.json([]);
   if (url.endsWith('/appt_claim_jobs')) {
     assert(JSON.parse(init.body).p_kinds.includes('calendar_delete'));
     return Response.json([{id: 'cleanup-job', kind: 'calendar_delete', lease_token: 'cleanup-lease', booking: {id: 'booking'}}]);
@@ -65,3 +67,29 @@ await import('../supabase/functions/dispatch-bookings/index.ts?calendar-cleanup'
 assert.equal((await (await handler(authorized())).json()).delivered, 1);
 assert.deepEqual(cleanup, ['GET', 'DELETE']);
 console.log('PASS calendar cleanup jobs remove events instead of recreating them');
+
+const syncedBooking = {id:'11111111-2222-4333-8444-555555555555',name:'Guest',event_name:'PGA',
+  starts_at:'2099-01-27T14:00:00Z',ends_at:'2099-01-27T14:30:00Z'};
+const syncCalls = [];
+globalThis.fetch = async (url,init) => {
+  if(url === 'https://oauth2.googleapis.com/token') return Response.json({access_token:'token'});
+  if(url.endsWith('/appt_claim_jobs')) return Response.json([{id:'create',kind:'calendar',lease_token:'outbound',booking:syncedBooking}]);
+  if(url.includes('/calendar/v3/')) {
+    syncCalls.push(init.method || 'GET');
+    if(init.method === 'POST') return Response.json({});
+    return Response.json({id:'appt11111111222243338444555555555555',status:'cancelled'});
+  }
+  if(url.endsWith('/appt_calendar_delivered')) { syncCalls.push('bound'); return new Response(null,{status:204}); }
+  if(url.endsWith('/appt_finish_job')) { syncCalls.push('acknowledged'); return new Response(null,{status:204}); }
+  if(url.endsWith('/appt_claim_calendar_audit')) return Response.json([{booking:syncedBooking,verified:true,lease_token:'audit'}]);
+  if(url.endsWith('/appt_finish_calendar_audit')) {
+    const body=JSON.parse(init.body); assert.equal(body.p_outcome,'cancelled'); assert.equal(body.p_lease_token,'audit');
+    syncCalls.push('cancelled'); return new Response(null,{status:204});
+  }
+  throw new Error('Unexpected sync request');
+};
+await import('../supabase/functions/dispatch-bookings/index.ts?sync');
+const synced=await (await handler(authorized())).json();
+assert.equal(synced.delivered,1);assert.equal(synced.audited,1);assert.equal(synced.audit_failed,false);
+assert.deepEqual(syncCalls,['POST','bound','acknowledged','GET','cancelled']);
+console.log('PASS worker binds successful deliveries before acknowledgment and applies verified inbound cancellations through leased RPC');

@@ -65,7 +65,36 @@ async function dashboard() {
     actions.append(remove); row.append(actions);
     el('bookings-table').append(row);
   }
+  await renderCalendarAudit();
   if (!data.bookings.length) { const row = document.createElement('tr'); const empty = cell('No bookings yet.'); empty.colSpan = 8; row.append(empty); el('bookings-table').append(row); }
+}
+async function renderCalendarAudit() {
+  const status = el('calendar-audit-status'), list = el('calendar-audit-issues');
+  list.replaceChildren();
+  try {
+    const data = await rpc('appt_admin_calendar_audit', {}, true);
+    const last = data.last_checked ? dateFormat(data.last_checked) : 'Not checked yet';
+    const stale = data.last_checked && Date.now() - new Date(data.last_checked).getTime() > 30 * 60 * 1000;
+    status.textContent = `Last check: ${last}. ${data.pending} awaiting first check.` +
+      (stale ? ' Checks appear delayed; check the sync function logs.' : ' Use Refresh to load the latest results.');
+    if (!data.issues.length) {
+      const note = document.createElement('p');
+      note.textContent = data.last_checked ? 'No differences reported in the checks completed so far.' : 'Waiting for the first scheduled audit.';
+      list.append(note);
+    }
+    for (const issue of data.issues) {
+      const item = document.createElement('div'); item.className = 'notice';
+      const title = document.createElement('strong');
+      const label = {cancelled: 'Cancelled in Google - place released', changed: 'Needs review', missing: 'Entry missing - booking retained', error: 'Could not verify'}[issue.outcome];
+      title.textContent = `${issue.event_name} / ${issue.name}: ${label}`;
+      const detail = document.createElement('p');
+      detail.textContent = `App appointment: ${dateFormat(issue.starts_at)}. Checked: ${dateFormat(issue.checked_at)}.`;
+      const differences = document.createElement('p'); differences.textContent = issue.differences.join(' ');
+      item.append(title, detail, differences); list.append(item);
+    }
+  } catch {
+    status.textContent = 'Calendar audit is not available yet. Apply database update 008 and deploy the updated sync function.';
+  }
 }
 function updateReleaseField() {
   const event = events.find(event => event.id === el('release-event').value);
