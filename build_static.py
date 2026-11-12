@@ -65,6 +65,7 @@ def build(preview=False, output=None):
     shutil.copyfile(ROOT / 'static' / 'style.css', target / 'style.css')
     shutil.copyfile(ROOT / 'static' / 'booking-compact.css', target / 'booking-compact.css')
     shutil.copyfile(ROOT / 'static' / 'favicon.svg', target / 'favicon.svg')
+    shutil.copyfile(ROOT / 'static' / 'flame.svg', target / 'flame.svg')
     shutil.copytree(ROOT / 'static' / 'brand', target / 'brand', dirs_exist_ok=True)
     (target / 'config.json').write_text(json.dumps(settings), encoding='utf-8')
     if preview:

@@ -132,11 +132,10 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
     if (!button.disabled && slot.remaining === 1 && selectedEvent.name.trim() !== 'JR & Co. Appointments') {
       const fire = document.createElement('span');
       fire.className = 'last-place-fire';
-      fire.textContent = ' \u{1F525}';
       fire.setAttribute('aria-hidden', 'true');
-      for (const part of ['flame-left', 'flame-main', 'flame-right', 'flame-core', 'spark-one', 'spark-two']) {
-        const layer = document.createElement('span'); layer.className = part; fire.append(layer);
-      }
+      const flame = document.createElement('img');
+      flame.src = '/flame.svg?v=2'; flame.alt = ''; flame.width = 26; flame.height = 34;
+      fire.append(flame);
       remaining.append(fire);
     }
     button.append(remaining);
@@ -173,6 +172,7 @@ async function loadSlots(eventId) {
   selectedEvent = events.find(event => String(event.id) === String(eventId));
   if (showEvents) updateBookingLinks(String(selectedEvent.id));
   el('event-name').textContent = selectedEvent.name;
+  el('event-booth').hidden = !/^PGA\b/i.test(selectedEvent.name.trim());
   el('event-location').textContent = selectedEvent.location || '';
   el('event-bar').hidden = !selectedEvent.location && el('event-picker').hidden;
   el('event-description').textContent = selectedEvent.description || '';
