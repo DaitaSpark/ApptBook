@@ -96,7 +96,7 @@ body.booking-page footer { margin-top: 14px; padding-top: 10px; padding-bottom: 
 .booking-page .event-booth { font-size: 22px; font-weight: 500; line-height: 1.2; white-space: nowrap; }
 /* The SVG morphs flame contours independently, with a static reduced-motion version. */
 .booking-page .last-place-fire { position: relative; display: inline-block; width: 26px; height: 0; margin-left: 3px; line-height: 0; vertical-align: -3px; }
-.booking-page .last-place-fire img { position: absolute; display: block; width: 26px; height: 34px; left: 0; bottom: -5px; pointer-events: none; }
+.booking-page .last-place-fire img, .booking-page .last-place-fire svg { position: absolute; display: block; width: 26px; height: 34px; left: 0; bottom: -5px; pointer-events: none; }
 @media (max-width: 720px) {
   .booking-page .event-title-row { column-gap: 8px; }
   .booking-page .event-booth { font-size: 18px; }
@@ -104,3 +104,9 @@ body.booking-page footer { margin-top: 14px; padding-top: 10px; padding-bottom: 
 
 .booking-page .day-times .time .last-place-label { color: #b42318; font-weight: 700; }
 .booking-page .day-times .time.selected .last-place-label { color: #ffb4a9; }
+
+.booking-page .last-place-fire .flame-still { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .booking-page .last-place-fire .flame-motion { display: none; }
+  .booking-page .last-place-fire .flame-still { display: inline; }
+}

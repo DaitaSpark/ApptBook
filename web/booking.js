@@ -2,6 +2,45 @@ import {settings, rpc, el, notify, eastern, localTimestamp, option} from './api.
 
 let cfg, events = [], slots = [], selectedEvent, selectedDate, selectedSlot, requestId;
 let months = [], monthIndex = 0, loadSequence = 0, saving = false, previewData;
+// Inline SVG avoids image-level animation freezing on mobile browsers.
+let flameSource, flameSequence = 0;
+const flameMotionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+function syncFlameMotion() {
+  if (document.hidden) return;
+  document.querySelectorAll('.last-place-fire svg').forEach(svg => {
+    if (flameMotionPreference.matches) svg.pauseAnimations();
+    else svg.unpauseAnimations();
+  });
+}
+flameMotionPreference.addEventListener('change', syncFlameMotion);
+window.addEventListener('pageshow', syncFlameMotion);
+document.addEventListener('visibilitychange', syncFlameMotion);
+async function animateFlame(container) {
+  try {
+    flameSource ||= fetch('/flame.svg?v=inline-1').then(response => {
+      if (!response.ok) throw new Error('Flame artwork unavailable.');
+      return response.text();
+    });
+    const markup = await flameSource;
+    if (!container.isConnected) return;
+    const source = new DOMParser().parseFromString(markup, 'image/svg+xml').documentElement;
+    if (source.localName !== 'svg') return;
+    const svg = document.importNode(source, true);
+    // Each time tile needs its own gradient IDs when the artwork is inline.
+    const prefix = `booking-flame-${++flameSequence}-`;
+    svg.querySelectorAll('[id]').forEach(node => { node.id = prefix + node.id; });
+    svg.querySelectorAll('[fill]').forEach(node => {
+      node.setAttribute('fill', node.getAttribute('fill').replace(/url\(#([^)]*)\)/g, (_, id) => `url(#${prefix}${id})`));
+    });
+    svg.querySelectorAll('style').forEach(node => node.remove());
+    svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false');
+    svg.setAttribute('width', '26'); svg.setAttribute('height', '34');
+    container.replaceChildren(svg);
+    syncFlameMotion();
+  } catch {
+    // Keep the image fallback if artwork fails to load; booking stays usable.
+  }
+}
 const form = el('booking-form');
 const steps = [...document.querySelectorAll('[data-step]')];
 const viewTimes = document.createElement('button');
@@ -13,6 +52,7 @@ document.querySelector('.calendar-panel').append(viewTimes);
 function showTimes() {
   if (saving || !selectedDate) return;
   stage('time');
+  syncFlameMotion();
   if (matchMedia('(max-width: 720px)').matches)
     document.querySelector('.slot-panel').scrollIntoView({block: 'nearest', behavior: 'instant'});
   el('day-times').querySelector('button:not(:disabled)')?.focus({preventScroll: true});
@@ -135,13 +175,15 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
       fire.className = 'last-place-fire';
       fire.setAttribute('aria-hidden', 'true');
       const flame = document.createElement('img');
-      flame.src = '/flame.svg?v=2'; flame.alt = ''; flame.width = 26; flame.height = 34;
+      flame.src = '/flame.svg?v=inline-1'; flame.alt = ''; flame.width = 26; flame.height = 34;
       fire.append(flame);
       remaining.append(fire);
     }
     button.append(remaining);
     if (!button.disabled) button.addEventListener('click', () => chooseTime(slot, button));
     times.append(button);
+    const fire = button.querySelector('.last-place-fire');
+    if (fire) void animateFlame(fire);
   }
   steps.find(button => button.dataset.step === 'time').disabled = false;
   stage(automatic ? 'date' : 'time');
