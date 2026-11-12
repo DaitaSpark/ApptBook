@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar} from '../supabase/functions/dispatch-bookings/delivery.js';
 
 const booking = {id: '11111111-2222-4333-8444-555555555555', name: 'Guest', email: 'guest@example.com',
-  phone: '555-0100', notes: 'Private team note', event_name: 'JR Golf', location: 'Office',
+  phone: '555-0100', company: 'Pine Valley Golf Club', source_label: 'Jeff sales link', source_kind: 'salesperson', notes: 'Private team note', event_name: 'JR Golf', location: 'Office',
   starts_at: '2099-01-05T14:00:00Z', ends_at: '2099-01-05T14:30:00Z'};
 const calls = [];
 const success = async (url, init) => { calls.push({url, init}); return new Response('{}', {status: 200}); };
@@ -14,6 +14,7 @@ assert.deepEqual(payload.to, [booking.email]);
 assert.deepEqual(payload.bcc, [secrets.TEAM_EMAIL]);
 assert.equal(calls.at(-1).init.headers['Idempotency-Key'], `appointment-${booking.id}`);
 assert(!payload.text.includes(booking.notes));
+assert(!payload.text.includes(booking.source_label));
 await deliverEmail({...booking, email: ''}, secrets, '', success);
 assert.deepEqual(JSON.parse(calls.at(-1).init.body).to, [secrets.TEAM_EMAIL]);
 console.log('PASS email recipients, team notifications, privacy, and Resend idempotency');
@@ -31,6 +32,8 @@ payload = JSON.parse(calls.at(-1).init.body);
 assert.equal(payload.id, 'appt11111111222243338444555555555555');
 assert.equal(payload.start.timeZone, 'America/New_York');
 assert(payload.description.includes(booking.notes));
+assert(payload.description.includes(`Company / Golf Course: ${booking.company}`));
+assert(payload.description.includes(`Source: ${booking.source_label} (salesperson)`));
 assert(!payload.attendees);
 await deliverCalendar(booking, secrets, 'token', async (url, init) => init.method === 'POST' ?
   new Response('{}', {status: 409}) : new Response(JSON.stringify({extendedProperties: {private: {appt_booking_id: booking.id}}})));

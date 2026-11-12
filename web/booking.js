@@ -219,11 +219,13 @@ form.addEventListener('submit', async event => {
       p_name: values.name.trim(), p_email: values.email.trim(), p_phone: values.phone.trim(), p_notes: values.notes.trim(),
       p_ref: activeReferral(selectedEvent.id)};
     let receipt;
-    try { receipt = await rpc('appt_book_tracked', parameters); }
+    try { receipt = values.company.trim() ?
+      await rpc('appt_book_company', {...parameters, p_company: values.company.trim()}) :
+      await rpc('appt_book_tracked', parameters); }
     catch (error) {
       // Keep ordinary bookings working while update 003 is being applied.
       // A tracked link must never silently lose its attribution.
-      if (error.code !== 'PGRST202' || parameters.p_ref) throw error;
+      if (error.code !== 'PGRST202' || parameters.p_ref || values.company.trim()) throw error;
       const {p_ref, ...legacy} = parameters;
       receipt = await rpc('appt_book', legacy);
     }

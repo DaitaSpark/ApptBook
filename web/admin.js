@@ -42,7 +42,7 @@ async function dashboard() {
   el('bookings-table').replaceChildren();
   for (const booking of data.bookings) {
     const row = document.createElement('tr');
-    row.append(cell(booking.name), cell([booking.email, booking.phone].filter(Boolean).join('\n')),
+    row.append(cell(booking.name), cell(booking.company), cell([booking.email, booking.phone].filter(Boolean).join('\n')),
       cell(`${booking.event_name}\n${dateFormat(booking.starts_at)}`), cell(booking.notes),
       cell(booking.source_label ? `${booking.source_label}\n${booking.source_kind || ''}` : 'Direct / untracked'),
       cell(`Email: ${stateLabel(booking.email_status)}\nCalendar: ${stateLabel(booking.calendar_status)}`));
@@ -65,7 +65,7 @@ async function dashboard() {
     actions.append(remove); row.append(actions);
     el('bookings-table').append(row);
   }
-  if (!data.bookings.length) { const row = document.createElement('tr'); const empty = cell('No bookings yet.'); empty.colSpan = 7; row.append(empty); el('bookings-table').append(row); }
+  if (!data.bookings.length) { const row = document.createElement('tr'); const empty = cell('No bookings yet.'); empty.colSpan = 8; row.append(empty); el('bookings-table').append(row); }
 }
 function updateReleaseField() {
   const event = events.find(event => event.id === el('release-event').value);
@@ -210,8 +210,8 @@ el('export').addEventListener('click', async event => {
       if (/^[=+\-@\t\r\n]/.test(text)) text = "'" + text;
       return '"' + text.replaceAll('"', '""') + '"';
     };
-    const rows = [['Name', 'Email', 'Phone', 'Event', 'Start (Eastern)', 'Notes', 'Source', 'Source type', 'Email status', 'Calendar status'],
-      ...records.map(record => [record.name, record.email, record.phone, record.event_name,
+    const rows = [['Name', 'Company / Golf Course', 'Email', 'Phone', 'Event', 'Start (Eastern)', 'Notes', 'Source', 'Source type', 'Email status', 'Calendar status'],
+      ...records.map(record => [record.name, record.company || '', record.email, record.phone, record.event_name,
         dateFormat(record.starts_at), record.notes, record.source_label || 'Direct / untracked', record.source_kind || '',
         record.email_status, record.calendar_status])];
     const url = URL.createObjectURL(new Blob(['\uFEFF' + rows.map(row => row.map(escape).join(',')).join('\r\n')], {type: 'text/csv;charset=utf-8'}));

@@ -55,7 +55,7 @@ def mocked(page, mode='success'):
                 data = [dict(slot, remaining=0 if slot['id'] in [SLOT, NEXT] else 1) for slot in data]
             elif mode == 'all-full':
                 data = [dict(slot, remaining=0) for slot in data]
-        elif path in ['appt_book', 'appt_book_tracked']:
+        elif path in ['appt_book', 'appt_book_tracked', 'appt_book_company']:
             attempts.append(body)
             if mode == 'network' and len(attempts) == 1:
                 route.abort('failed')
@@ -169,9 +169,11 @@ with sync_playwright() as playwright:
         assert button['y'] + button['height'] <= height, (width, 'confirm', button)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         fill_guest(page)
+        page.locator('[name=company]').fill('Pine Valley Golf Club')
         page.locator('#book-button').click()
         page.locator('#confirmation').wait_for(state='visible')
         assert 'appointment is saved' in page.locator('#confirmation-email').inner_text()
+        assert attempts[0]['p_company'] == 'Pine Valley Golf Club'
         assert len(attempts) == 1
         assert not errors, errors
         print(f'PASS {width}x{height}: calendar, month navigation, Eastern time, above-fold controls, successful booking')

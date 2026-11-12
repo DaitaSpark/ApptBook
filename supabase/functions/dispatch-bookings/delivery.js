@@ -56,7 +56,10 @@ export async function deliverCalendar(booking, secrets, token, request = fetch) 
   const headers = {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'};
   const response = await request(`${url}?sendUpdates=none`, {method: 'POST', headers,
     body: JSON.stringify({id: eventId, summary: `${booking.event_name} — ${booking.name}`,
-      location: booking.location, description: [booking.name, booking.email, booking.phone, booking.notes,
+      location: booking.location, description: [booking.name, booking.email, booking.phone,
+        booking.company ? `Company / Golf Course: ${booking.company}` : '',
+        `Source: ${booking.source_label || 'Direct / untracked'}${booking.source_label && booking.source_kind ? ` (${booking.source_kind})` : ''}`,
+        booking.notes,
         `Booking reference: ${booking.id}`].filter(Boolean).join('\n'),
       start: {dateTime: booking.starts_at, timeZone: 'America/New_York'},
       end: {dateTime: booking.ends_at, timeZone: 'America/New_York'},
