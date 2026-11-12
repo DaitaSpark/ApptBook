@@ -129,7 +129,7 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
     const remaining = document.createElement('small');
     remaining.textContent = button.disabled ? (slot.remaining > 0 ? 'Not available' : 'Fully booked') :
       `${slot.remaining} ${slot.remaining === 1 ? 'place' : 'places'} left`;
-    if (!button.disabled && slot.remaining === 1) {
+    if (!button.disabled && slot.remaining === 1 && selectedEvent.name.trim() !== 'JR & Co. Appointments') {
       const fire = document.createElement('span');
       fire.className = 'last-place-fire';
       fire.textContent = ' \u{1F525}';
