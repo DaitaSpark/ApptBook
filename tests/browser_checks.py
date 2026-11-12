@@ -105,6 +105,8 @@ def mocked(page, mode='success'):
             data = NEXT
         elif path == 'appt_admin_generate_slots':
             data = {'added': 28, 'removed': 2, 'preserved': 0, 'conflicts': 0}
+        elif path == 'appt_admin_set_capacity':
+            data = {'updated': 34, 'capacity': body['p_capacity']}
         elif path == 'appt_admin_set_release':
             state['limit'] = body['p_limit']
             data = None
@@ -469,6 +471,11 @@ with sync_playwright() as playwright:
     assert page.locator('#bookings-table img').count() == 0
     assert '<img' in page.locator('#bookings-table').inner_text()
     assert 'Jeff' in page.locator('#bookings-table').inner_text()
+    page.locator('#capacity-form [name="event_id"]').select_option(OTHER)
+    page.locator('#capacity-form [name="capacity"]').fill('2')
+    page.locator('#capacity-form button').click()
+    page.wait_for_function("document.getElementById('message').textContent.includes('Updated 34 upcoming times to 2 places')")
+    assert ('appt_admin_set_capacity', {'p_event_id': OTHER, 'p_capacity': 2}) in calls
     page.locator('#release-event').select_option(EVENT)
     page.locator('#release-form [name="limit"]').fill('3')
     page.locator('#release-form button').click()

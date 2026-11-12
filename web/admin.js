@@ -178,6 +178,16 @@ mutation('event-form', async values => {
   el('event-form').reset();
   return 'Person or event created.';
 });
+mutation('capacity-form', async values => {
+  let result;
+  try {
+    result = await rpc('appt_admin_set_capacity', {p_event_id: values.event_id, p_capacity: Number(values.capacity)}, true);
+  } catch (error) {
+    if (error.code === 'PGRST202') throw new Error('Run database update 010_update_existing_capacity.sql in Supabase SQL Editor to enable capacity changes.');
+    throw error;
+  }
+  return `Updated ${result.updated} upcoming times to ${result.capacity} places per meeting. The event default is also ${result.capacity}. Existing bookings and history were preserved.`;
+});
 mutation('release-form', async values => {
   await rpc('appt_admin_set_release', {p_event_id: values.event_id, p_limit: values.limit ? Number(values.limit) : null}, true);
   return values.limit ? `This event now offers up to ${values.limit} open time choices per day.` : 'All available time choices are now open for this event.';
@@ -206,7 +216,7 @@ mutation('range-form', async values => {
   }
   el('range-form').elements.replace.checked = false;
   return `Created ${result.added} meeting slots. Replaced ${result.removed} unbooked slots. ` +
-    `${result.preserved} slots with bookings preserved. ${result.conflicts} overlapping times skipped.`;
+    `${result.preserved} slots with booking history preserved. ${result.conflicts} overlapping times skipped.`;
 });
 function rangeSummary() {
   const form = el('range-form');
