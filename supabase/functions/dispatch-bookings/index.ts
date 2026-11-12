@@ -1,4 +1,4 @@
-import {deliverCalendar, deliverEmail, googleAccessToken} from './delivery.js';
+import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar} from './delivery.js';
 
 const secrets = Object.fromEntries(['DISPATCH_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
   'RESEND_API_KEY', 'MAIL_FROM', 'TEAM_EMAIL', 'WORKSPACE_EMAIL', 'GOOGLE_CLIENT_ID',
@@ -24,7 +24,7 @@ Deno.serve(async request => {
     const googleConfigured = Boolean(secrets.GOOGLE_CLIENT_ID && secrets.GOOGLE_CLIENT_SECRET && secrets.GOOGLE_REFRESH_TOKEN);
     const kinds = [];
     if ((googleConfigured && secrets.WORKSPACE_EMAIL) || (secrets.RESEND_API_KEY && secrets.MAIL_FROM)) kinds.push('email');
-    if (googleConfigured && secrets.GOOGLE_CALENDAR_ID) kinds.push('calendar');
+    if (googleConfigured && secrets.GOOGLE_CALENDAR_ID) kinds.push('calendar', 'calendar_delete');
     if (!kinds.length) return Response.json({processed: 0, message: 'No delivery provider configured; bookings remain queued.'});
     const token = googleConfigured ? await googleAccessToken(secrets, requestWithTimeout) : '';
     const jobs = await rpc('appt_claim_jobs', {p_kinds: kinds, p_limit: 5});
@@ -33,7 +33,9 @@ Deno.serve(async request => {
       let errorText = null;
       try {
         if (job.kind === 'email') await deliverEmail(job.booking, secrets, token, requestWithTimeout);
-        else await deliverCalendar(job.booking, secrets, token, requestWithTimeout);
+        else if (job.kind === 'calendar_delete') await removeCalendar(job.booking, secrets, token, requestWithTimeout);
+        else if (job.kind === 'calendar') await deliverCalendar(job.booking, secrets, token, requestWithTimeout);
+        else throw new Error('Unsupported delivery job.');
         delivered++;
       } catch (error) { errorText = error instanceof Error ? error.message : 'Delivery failed.'; }
       await rpc('appt_finish_job', {p_id: job.id, p_lease_token: job.lease_token, p_error: errorText});

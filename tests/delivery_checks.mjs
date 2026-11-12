@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {deliverCalendar, deliverEmail, googleAccessToken} from '../supabase/functions/dispatch-bookings/delivery.js';
+import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar} from '../supabase/functions/dispatch-bookings/delivery.js';
 
 const booking = {id: '11111111-2222-4333-8444-555555555555', name: 'Guest', email: 'guest@example.com',
   phone: '555-0100', notes: 'Private team note', event_name: 'JR Golf', location: 'Office',
@@ -40,3 +40,15 @@ console.log('PASS stable calendar IDs, Eastern timezone, verified conflict retri
 await assert.rejects(deliverEmail(booking, secrets, '', async () => new Response('secret provider error', {status: 503})), /HTTP 503/);
 await assert.rejects(googleAccessToken({}, async () => new Response('{}')), /no access token/);
 console.log('PASS provider failures surface without exposing response secrets');
+const removals = [];
+await removeCalendar(booking, secrets, 'token', async (url, init) => {
+  removals.push({url, init});
+  return init.method === 'DELETE' ? new Response(null, {status: 204}) :
+    Response.json({extendedProperties: {private: {appt_booking_id: booking.id}}});
+});
+assert.equal(removals.length, 2);
+assert.equal(removals[1].init.method, 'DELETE');
+await removeCalendar(booking, secrets, 'token', async () => new Response('{}', {status: 404}));
+await removeCalendar(booking, secrets, 'token', async () => new Response('{}', {status: 410}));
+await assert.rejects(removeCalendar(booking, secrets, 'token', async () => Response.json({})), /ID conflict/);
+console.log('PASS calendar removal verifies ownership, accepts already removed events, and retries safely');

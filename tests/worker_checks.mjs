@@ -40,3 +40,28 @@ assert.equal(acknowledgments[0].p_lease_token, 'lease');
 assert.equal(acknowledgments[0].p_error, 'Email request failed (HTTP 503).');
 assert(!JSON.stringify(acknowledgments).includes('private provider payload'));
 console.log('PASS failed provider deliveries are acknowledged for retry without leaking response data');
+
+environment = {...environment, GOOGLE_CLIENT_ID: 'client', GOOGLE_CLIENT_SECRET: 'secret',
+  GOOGLE_REFRESH_TOKEN: 'refresh', GOOGLE_CALENDAR_ID: 'shared@example.com'};
+const cleanup = [];
+globalThis.fetch = async (url, init) => {
+  if (url === 'https://oauth2.googleapis.com/token') return Response.json({access_token: 'google-token'});
+  if (url.endsWith('/appt_claim_jobs')) {
+    assert(JSON.parse(init.body).p_kinds.includes('calendar_delete'));
+    return Response.json([{id: 'cleanup-job', kind: 'calendar_delete', lease_token: 'cleanup-lease', booking: {id: 'booking'}}]);
+  }
+  if (url.includes('/calendar/v3/')) {
+    cleanup.push(init.method || 'GET');
+    return init.method === 'DELETE' ? new Response(null, {status: 204}) :
+      Response.json({extendedProperties: {private: {appt_booking_id: 'booking'}}});
+  }
+  if (url.endsWith('/appt_finish_job')) {
+    assert.equal(JSON.parse(init.body).p_error, null);
+    return new Response(null, {status: 204});
+  }
+  throw new Error('Unexpected provider request');
+};
+await import('../supabase/functions/dispatch-bookings/index.ts?calendar-cleanup');
+assert.equal((await (await handler(authorized())).json()).delivered, 1);
+assert.deepEqual(cleanup, ['GET', 'DELETE']);
+console.log('PASS calendar cleanup jobs remove events instead of recreating them');

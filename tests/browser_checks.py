@@ -28,7 +28,7 @@ for day, count in [(27, 14), (28, 14), (29, 6)]:
 def mocked(page, mode='success'):
     calls = []
     attempts = []
-    state = {'full': False, 'refs': [], 'limit': None}
+    state = {'full': False, 'refs': [], 'limit': None, 'booking_deleted': False}
     def respond(route):
         request = route.request
         path = request.url.split('/rest/v1/rpc/')[-1]
@@ -83,6 +83,9 @@ def mocked(page, mode='success'):
                                       'starts_at': SLOTS[0]['starts_at'], 'source_label': 'Jeff', 'source_kind': 'salesperson',
                                       'email_status': 'queued', 'calendar_status': 'queued'}],
                         'booking_count': 1, 'referral_links': state['refs']}
+                if state['booking_deleted']:
+                    data['bookings'] = []
+                    data['booking_count'] = 0
         elif path == 'appt_admin_bookings':
             data = [{'name': '=1+1', 'email': 'guest@example.com', 'event_name': EVENTS[0]['name'], 'source_label': 'Jeff', 'source_kind': 'salesperson',
                      'starts_at': SLOTS[0]['starts_at']}]
@@ -106,6 +109,9 @@ def mocked(page, mode='success'):
             data = None
         elif path == 'appt_admin_delete_referral':
             state['refs'] = [link for link in state['refs'] if link['id'] != body['p_id']]
+            data = None
+        elif path == 'appt_admin_delete_booking':
+            state['booking_deleted'] = True
             data = None
         else:
             raise AssertionError(f'Unexpected request: {request.url}')
@@ -493,6 +499,13 @@ with sync_playwright() as playwright:
     page.locator('#referral-links').get_by_role('button', name='Delete link').click()
     page.wait_for_function("document.querySelectorAll('#referral-links input').length === 0")
     assert 'Jeff' in page.locator('#bookings-table').inner_text()
+    page.once('dialog', lambda dialog: dialog.dismiss())
+    page.locator('#bookings-table').get_by_role('button', name='Delete booking').click()
+    assert not any(path == 'appt_admin_delete_booking' for path, body in calls)
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#bookings-table').get_by_role('button', name='Delete booking').click()
+    page.wait_for_function("document.getElementById('bookings-table').textContent.includes('No bookings yet')")
+    assert page.locator('#bookings-heading').inner_text() == 'Bookings (0)'
     page.locator('#sign-out').click()
     page.locator('#login-panel').wait_for(state='visible')
     assert page.evaluate("sessionStorage.getItem('jrco-admin-session')") is None

@@ -46,9 +46,26 @@ async function dashboard() {
       cell(`${booking.event_name}\n${dateFormat(booking.starts_at)}`), cell(booking.notes),
       cell(booking.source_label ? `${booking.source_label}\n${booking.source_kind || ''}` : 'Direct / untracked'),
       cell(`Email: ${stateLabel(booking.email_status)}\nCalendar: ${stateLabel(booking.calendar_status)}`));
+    const actions = document.createElement('td');
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary';
+    remove.textContent = 'Delete booking';
+    remove.setAttribute('aria-label', `Delete booking for ${booking.name}`);
+    remove.addEventListener('click', async () => {
+      if (!confirm(`Delete ${booking.name}’s booking for ${booking.event_name} on ${dateFormat(booking.starts_at)}? This frees one place and removes the booking from the active list. No cancellation email is sent.`)) return;
+      remove.disabled = true;
+      try {
+        await rpc('appt_admin_delete_booking', {p_id: booking.id}, true);
+        await dashboard();
+        notify('Booking deleted and its place released. Calendar removal is queued if Google sync is configured.');
+      } catch (error) {
+        notify(error.code === 'PGRST202' ? 'Run database update 005_delete_bookings.sql in Supabase SQL Editor to enable booking deletion.' : error.message, true);
+        remove.disabled = false;
+      }
+    });
+    actions.append(remove); row.append(actions);
     el('bookings-table').append(row);
   }
-  if (!data.bookings.length) { const row = document.createElement('tr'); const empty = cell('No bookings yet.'); empty.colSpan = 6; row.append(empty); el('bookings-table').append(row); }
+  if (!data.bookings.length) { const row = document.createElement('tr'); const empty = cell('No bookings yet.'); empty.colSpan = 7; row.append(empty); el('bookings-table').append(row); }
 }
 function updateReleaseField() {
   const event = events.find(event => event.id === el('release-event').value);

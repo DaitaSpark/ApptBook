@@ -67,3 +67,16 @@ export async function deliverCalendar(booking, secrets, token, request = fetch) 
       throw new Error('Calendar event ID conflict.');
   } else await checked(response, 'Calendar');
 }
+
+export async function removeCalendar(booking, secrets, token, request = fetch) {
+  const eventId = 'appt' + booking.id.replaceAll('-', '');
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(secrets.GOOGLE_CALENDAR_ID)}/events/${eventId}`;
+  const headers = {Authorization: `Bearer ${token}`};
+  const existing = await request(url, {headers});
+  if ([404, 410].includes(existing.status)) return;
+  await checked(existing, 'Calendar verification');
+  if ((await existing.json()).extendedProperties?.private?.appt_booking_id !== booking.id)
+    throw new Error('Calendar event ID conflict.');
+  const response = await request(`${url}?sendUpdates=none`, {method: 'DELETE', headers});
+  if (![404, 410].includes(response.status)) await checked(response, 'Calendar removal');
+}
