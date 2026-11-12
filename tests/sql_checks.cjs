@@ -295,6 +295,43 @@ const {PGlite} = require('../.test-tools/pglite/package/dist/index.cjs');
   assert.equal(readyCleanup[0].booking.id, replacement.id);
   assert.equal(readyCleanup[0].kind, 'calendar_delete');
   check('booking deletion is admin-only and idempotent, releases one place, hides active rows, retains audit data, and queues safe calendar cleanup');
+  await db.exec('reset role');
+  const randomMigration = fs.readFileSync('supabase/migrations/006_random_release.sql', 'utf8');
+  await db.exec(randomMigration);
+  await role('authenticated', admin);
+  const randomEvent = await scalar("select public.appt_admin_create_event('Random release','','',2,false)");
+  await scalar("select public.appt_admin_generate_slots($1,'2099-04-15','2099-04-16','09:00','13:30',30,2,false,false)", [randomEvent]);
+  await query('select public.appt_admin_set_release($1,3)', [randomEvent]);
+  await db.exec('reset role');
+  const prioritiesBefore = await query('select id,release_priority from appt_private.slots where event_id=$1 order by id', [randomEvent]);
+  assert.equal(new Set(prioritiesBefore.map(slot => slot.release_priority)).size, 20);
+  await db.exec(randomMigration);
+  assert.deepEqual(await query('select id,release_priority from appt_private.slots where event_id=$1 order by id', [randomEvent]), prioritiesBefore);
+  let randomSlots = await scalar('select public.appt_public_slots($1)', [randomEvent]);
+  const ranks = [8,1,7,6,2,9,5,4,3,10];
+  for (let index=0; index<randomSlots.length; index++) {
+    await query('update appt_private.slots set release_priority=$2 where id=$1',
+      [randomSlots[index].id, `${String(ranks[index % 10]).padStart(8,'0')}-0000-4000-8000-000000000000`]);
+  }
+  await role('anon');
+  randomSlots = await scalar('select public.appt_public_slots($1)', [randomEvent]);
+  const selectedIds = randomSlots.filter(slot => slot.is_open).map(slot => slot.id);
+  assert.deepEqual(selectedIds, [1,4,8,11,14,18].map(index => randomSlots[index].id));
+  assert(randomSlots.every(slot => !('release_priority' in slot)));
+  assert.deepEqual((await scalar('select public.appt_public_slots($1)', [randomEvent])).filter(slot => slot.is_open).map(slot => slot.id), selectedIds);
+  await assert.rejects(query('select public.appt_book($1,$2,$3,$4,$5,$6)',
+    [randomSlots[0].id, randomUUID(), 'Closed time', '', '555-0100', '']), /not available/);
+  const randomBooking = await scalar('select public.appt_book($1,$2,$3,$4,$5,$6)',
+    [randomSlots[1].id, randomUUID(), 'First place', '', '555-0101', '']);
+  assert.deepEqual((await scalar('select public.appt_public_slots($1)', [randomEvent])).filter(slot => slot.is_open).map(slot => slot.id), selectedIds);
+  await scalar('select public.appt_book($1,$2,$3,$4,$5,$6)',
+    [randomSlots[1].id, randomUUID(), 'Second place', '', '555-0102', '']);
+  assert.deepEqual((await scalar('select public.appt_public_slots($1)', [randomEvent])).filter(slot => slot.is_open).map(slot => slot.id),
+    [4,7,8,11,14,18].map(index => randomSlots[index].id));
+  await role('authenticated', admin);
+  await query('select public.appt_admin_delete_booking($1)', [randomBooking.id]);
+  assert.deepEqual((await scalar('select public.appt_public_slots($1)', [randomEvent])).filter(slot => slot.is_open).map(slot => slot.id), selectedIds);
+  check('random priorities persist across refresh/migration, spread choices through the day, gate booking, and replace only filled times');
   await db.close();
   console.log(`${checks} SQL checks passed. PGlite serializes sessions; multi-connection load testing remains a live-project check.`);
 })().catch(error => { console.error(error.message, error.detail || '', error.where || ''); process.exit(1); });

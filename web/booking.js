@@ -127,7 +127,7 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
     button.textContent = timeLabel(slot);
     button.setAttribute('aria-pressed', 'false');
     const remaining = document.createElement('small');
-    remaining.textContent = button.disabled ? (slot.remaining > 0 ? 'Not yet open' : 'Fully booked') :
+    remaining.textContent = button.disabled ? (slot.remaining > 0 ? 'Not available' : 'Fully booked') :
       `${slot.remaining} ${slot.remaining === 1 ? 'place' : 'places'} left`;
     button.append(remaining);
     if (!button.disabled) button.addEventListener('click', () => chooseTime(slot, button));
@@ -239,9 +239,9 @@ form.addEventListener('submit', async event => {
     form.reset();
     el('confirmation').scrollIntoView({block: 'start', behavior: 'smooth'});
   } catch (error) {
-    if (error.message.includes('no longer available') || error.message.includes('not yet open')) {
+    if (error.message.includes('no longer available') || error.message.includes('not yet open') || error.message.includes('time is not available')) {
       await loadSlots(selectedEvent.id);
-      notify('That time was just booked. Please choose another available time.', true);
+      notify('That time is no longer available. Please choose another available time.', true);
     } else if (error.code === 'PGRST202') notify('Booking setup is being updated. Please contact the organizer or try again shortly.', true);
     else notify(`${error.message} If the connection was interrupted, retrying the same booking will not reserve another place.`, true);
   } finally {

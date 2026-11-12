@@ -48,7 +48,7 @@ def mocked(page, mode='success'):
             if body['p_event_id'] == OTHER:
                 data = PGA_SLOTS if mode in ['pga', 'staged'] else [dict(SLOTS[0], id=OTHER)]
                 if mode == 'staged':
-                    data = [dict(slot, is_open=(index < 3)) for index, slot in enumerate(PGA_SLOTS)]
+                    data = [dict(slot, is_open=(index in [1, 5, 10])) for index, slot in enumerate(PGA_SLOTS)]
             if mode == 'unordered':
                 data = list(reversed(data))
             elif mode == 'next-available':
@@ -188,7 +188,7 @@ with sync_playwright() as playwright:
         page.locator('#message').wait_for(state='visible')
         if mode == 'full':
             assert not page.locator('#booking-form').is_visible()
-            assert 'just booked' in page.locator('#message').inner_text()
+            assert 'no longer available' in page.locator('#message').inner_text()
             page.locator('.has-availability').first.click()
             assert not page.locator(f'[data-slot="{SLOT}"]').count()
         else:
@@ -382,15 +382,16 @@ with sync_playwright() as playwright:
         assert page.locator('#day-times .time').count() == 14
         assert page.locator('#day-times button:not(:disabled)').count() == 3
         assert page.locator('#day-times button:disabled').count() == 11
-        assert 'Not yet open' in page.locator('#day-times button:disabled').first.inner_text()
+        assert 'Not available' in page.locator('#day-times button:disabled').first.inner_text()
+        assert [button.get_attribute('data-slot') for button in page.locator('[data-slot]').all()] == [PGA_SLOTS[index]['id'] for index in [1, 5, 10]]
         assert page.locator('#release-hint').is_visible()
-        updated = [dict(slot, remaining=0 if index == 0 else 3, is_open=index in [1, 2, 3])
+        updated = [dict(slot, remaining=0 if index == 1 else 3, is_open=index in [5, 7, 10])
                    for index, slot in enumerate(PGA_SLOTS)]
         page.route('https://supabase.test/rest/v1/rpc/appt_public_slots', lambda route: route.fulfill(json=updated, headers={'Access-Control-Allow-Origin': '*'}))
         page.clock.run_for(30010)
-        page.wait_for_function('(id) => Boolean(document.querySelector(`[data-slot="${id}"]`))', arg=PGA_SLOTS[3]['id'])
+        page.wait_for_function('(id) => Boolean(document.querySelector(`[data-slot="${id}"]`))', arg=PGA_SLOTS[7]['id'])
         assert page.locator('#day-times button:not(:disabled)').count() == 3
-        assert 'Fully booked' in page.locator(f'[data-time-id="{PGA_SLOTS[0]["id"]}"]').inner_text()
+        assert 'Fully booked' in page.locator(f'[data-time-id="{PGA_SLOTS[1]["id"]}"]').inner_text()
         assert page.locator('#booking-form').is_hidden()
         print('PASS staged release: three selectable times, accurate grey labels, automatic refresh opens next time')
         page.close()
