@@ -191,9 +191,10 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
     button.textContent = timeLabel(slot);
     button.setAttribute('aria-pressed', 'false');
     const remaining = document.createElement('small');
+    const displayRemaining = slot.display_remaining ?? slot.remaining;
     remaining.textContent = button.disabled ? (slot.remaining > 0 ? 'Not available' : 'Fully booked') :
-      `${slot.remaining} ${slot.remaining === 1 ? 'place' : 'places'} left`;
-    if (!button.disabled && slot.remaining === 1 && selectedEvent.name.trim() !== 'JR & Co. Appointments') {
+      `${displayRemaining} ${displayRemaining === 1 ? 'spot' : 'spots'} available`;
+    if (!button.disabled && displayRemaining === 1 && selectedEvent.name.trim() !== 'JR & Co. Appointments') {
       remaining.classList.add('last-place-label');
       const fire = document.createElement('span');
       fire.className = 'last-place-fire';

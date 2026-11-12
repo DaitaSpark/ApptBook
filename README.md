@@ -46,11 +46,11 @@ For year-round sharing, use `/?showEvents=true` to show the event dropdown, or a
 
 For correcting existing availability, **Replace unbooked slots on these dates** removes all unbooked slots for that event on those dates (including outside the new hours) before generating the new series. Booked slots retain their IDs, times, capacity, and reservations; overlaps are skipped and reported. Other dates and events are untouched. The option resets after a successful generation. Admin availability displays both start and end times. Applying migration 002 alone never changes a live schedule.
 
-### Release a few time choices per day
+### Slot counts and capacity
 
-After migration 003, use **Admin > Release time choices**, choose the event, enter `3`, and save. Blank means unlimited. This controls the number of distinct open times, not the capacity per time. With capacity 3, three open times initially offer up to nine places. An open time remains open until all its places are booked; once full, the next randomly prioritized future time opens. The limit is independent for each Eastern calendar day and shared across all salesperson/channel links. As time passes, past appointments drop out and later future choices can open.
+Apply `011_cosmetic_slot_counts.sql` after migrations 001?010 before deploying the updated frontend. All future slots are bookable until actual capacity is reached; previous daily release limits are ignored. The release control has been removed from Admin.
 
-All scheduled times remain visible for the chosen date: released choices are selectable, unreleased choices are grey **Not available**, and full times are grey **Fully booked**. The database enforces release eligibility through both booking endpoints; guessing a later slot ID cannot book it early. Active pages refresh availability every 30 seconds and when their tab becomes visible. Refresh does not interrupt contact-form entry or move focus. A booking submission always rechecks the current release/capacity state. Existing events stay unlimited until an admin saves a release limit.
+Each slot stores a random initial display count of 2?5, shared by all visitors and tracking links. This count is cosmetic until the first booking. After that, the tile permanently shows actual remaining capacity, even after cancellations or deletions. Existing slots with booking history start with actual counts. Full slots show **Fully booked** and are disabled. The server always enforces actual capacity.
 
 ### Salesperson and channel booking links
 

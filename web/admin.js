@@ -35,7 +35,6 @@ async function dashboard() {
   }
   if (!events.length) availability.textContent = 'Create your first person or event above.';
   renderReferralLinks(data.referral_links || []);
-  updateReleaseField();
   el('bookings-heading').textContent = `Bookings (${data.booking_count})`;
   el('booking-count').textContent = data.booking_count > data.bookings.length ?
     `Showing the latest ${data.bookings.length}. CSV export includes all bookings.` : '';
@@ -99,11 +98,6 @@ async function renderCalendarAudit() {
     status.textContent = 'Calendar audit is not available yet. Apply database updates 008 and 009 and deploy the updated sync function.';
   }
 }
-function updateReleaseField() {
-  const event = events.find(event => event.id === el('release-event').value);
-  el('release-form').elements.limit.value = event?.open_times_per_day ?? '';
-}
-el('release-event').addEventListener('change', updateReleaseField);
 function renderReferralLinks(links) {
   const container = el('referral-links');
   container.replaceChildren();
@@ -187,10 +181,6 @@ mutation('capacity-form', async values => {
     throw error;
   }
   return `Updated ${result.updated} upcoming times to ${result.capacity} places per meeting. The event default is also ${result.capacity}. Existing bookings and history were preserved.`;
-});
-mutation('release-form', async values => {
-  await rpc('appt_admin_set_release', {p_event_id: values.event_id, p_limit: values.limit ? Number(values.limit) : null}, true);
-  return values.limit ? `This event now offers up to ${values.limit} open time choices per day.` : 'All available time choices are now open for this event.';
 });
 mutation('referral-form', async values => {
   await rpc('appt_admin_create_referral', {p_event_id: values.event_id, p_label: values.label.trim(), p_kind: values.kind}, true);
