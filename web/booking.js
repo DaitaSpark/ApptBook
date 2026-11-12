@@ -229,7 +229,7 @@ form.addEventListener('submit', async event => {
       const {p_ref, ...legacy} = parameters;
       receipt = await rpc('appt_book', legacy);
     }
-    el('confirmation-name').textContent = `See you then, ${receipt.name}.`;
+    el('confirmation-name').textContent = `See you then, ${receipt.name.trim().split(/\s+/)[0]}.`;
     el('confirmation-event').textContent = receipt.event_name;
     el('confirmation-time').textContent = `${eastern(receipt.starts_at, {dateStyle: 'full', timeStyle: 'short'})} Eastern`;
     el('confirmation-location').textContent = /^PGA\b/i.test(receipt.event_name.trim()) ?
