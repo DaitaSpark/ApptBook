@@ -134,6 +134,9 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
       fire.className = 'last-place-fire';
       fire.textContent = ' \u{1F525}';
       fire.setAttribute('aria-hidden', 'true');
+      for (const part of ['flame-left', 'flame-main', 'flame-right', 'flame-core', 'spark-one', 'spark-two']) {
+        const layer = document.createElement('span'); layer.className = part; fire.append(layer);
+      }
       remaining.append(fire);
     }
     button.append(remaining);

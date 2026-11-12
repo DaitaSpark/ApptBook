@@ -91,22 +91,74 @@ body.booking-page footer { margin-top: 14px; padding-top: 10px; padding-bottom: 
   .booking-page .booking-description { display: none; }
 }
 
-/* A larger flame fits beside the remaining-place label without increasing tile height. */
+/* Layered flames change shape independently; sparks rise without moving the tile. */
 .booking-page .last-place-fire {
+  position: relative;
   display: inline-block;
-  width: 24px;
-  margin-left: 2px;
-  font-size: 20px;
+  width: 25px;
+  height: 0;
+  margin-left: 3px;
+  font-size: 0;
   line-height: 0;
   vertical-align: -3px;
-  transform-origin: 50% 80%;
-  animation: last-place-flicker 1.2s ease-in-out infinite;
 }
-@keyframes last-place-flicker {
-  0%, 100% { transform: rotate(-5deg) scale(1); }
-  35% { transform: rotate(5deg) scale(1.12); }
-  65% { transform: rotate(-3deg) scale(1.04); }
+.booking-page .last-place-fire > span {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+}
+.booking-page .flame-main {
+  left: 6px; bottom: -3px; width: 15px; height: 23px;
+  border-radius: 70% 10% 60% 40%;
+  background: linear-gradient(135deg, #ff3d00 15%, #ff8500 65%, #ffcf26);
+  box-shadow: 0 0 7px #ff800055;
+  animation: flame-main-burn 950ms ease-in-out infinite;
+}
+.booking-page .flame-left {
+  left: 3px; bottom: -2px; width: 10px; height: 17px;
+  border-radius: 15% 75% 35% 65%;
+  background: linear-gradient(#ff5400, #ffae00);
+  animation: flame-side-burn 740ms ease-in-out -300ms infinite alternate;
+}
+.booking-page .flame-right {
+  left: 14px; bottom: -2px; width: 8px; height: 18px;
+  border-radius: 75% 10% 65% 35%;
+  background: linear-gradient(#ff5700, #ffb900);
+  animation: flame-side-burn 870ms ease-in-out -600ms infinite alternate-reverse;
+}
+.booking-page .flame-core {
+  left: 9px; bottom: -2px; width: 9px; height: 14px;
+  border-radius: 70% 15% 55% 45%;
+  background: linear-gradient(145deg, #ffdd31 10%, #fff2a6 65%, #fffbed);
+  animation: flame-core-burn 680ms ease-in-out infinite alternate;
+}
+.booking-page .spark-one, .booking-page .spark-two {
+  width: 3px; height: 4px; bottom: 13px;
+  border-radius: 50%; background: #ff9c00; opacity: 0;
+  animation: flame-spark-rise 1500ms ease-out infinite;
+}
+.booking-page .spark-one { left: 7px; }
+.booking-page .spark-two { left: 18px; animation-delay: -800ms; animation-duration: 1800ms; }
+@keyframes flame-main-burn {
+  0%, 100% { transform: rotate(-12deg) scale(.95, 1); border-radius: 70% 10% 60% 40%; }
+  30% { transform: rotate(-5deg) scale(1.04, 1.12); border-radius: 55% 15% 65% 35%; }
+  65% { transform: rotate(-16deg) scale(1.08, .92); border-radius: 80% 5% 55% 45%; }
+}
+@keyframes flame-side-burn {
+  from { transform: skewX(-8deg) scale(.9, .85); }
+  to { transform: skewX(10deg) scale(1.05, 1.15); }
+}
+@keyframes flame-core-burn {
+  from { transform: rotate(-10deg) scale(.85, .88); }
+  to { transform: rotate(5deg) scale(1.1, 1.08); }
+}
+@keyframes flame-spark-rise {
+  0%, 15% { opacity: 0; transform: translate(0, 0) scale(1); }
+  25% { opacity: .85; }
+  80%, 100% { opacity: 0; transform: translate(-4px, -15px) scale(.2); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .booking-page .last-place-fire { animation: none; }
+  .booking-page .last-place-fire > span { animation: none; }
+  .booking-page .spark-one, .booking-page .spark-two { display: none; }
 }
