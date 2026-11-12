@@ -87,7 +87,7 @@ def mocked(page, mode='success'):
                     data['bookings'] = []
                     data['booking_count'] = 0
         elif path == 'appt_admin_calendar_audit':
-            data = {'last_checked': '2026-11-12T15:00:00Z', 'pending': 0, 'issues': [
+            data = {'last_checked': '2026-11-12T15:00:00Z', 'cancellation_sync': {'last_polled': '2026-11-12T15:01:00Z', 'last_error': None}, 'pending': 0, 'issues': [
                 {'id': SLOT, 'name': '<img src=x onerror=alert(1)>', 'event_name': 'PGA Show',
                  'starts_at': SLOTS[0]['starts_at'], 'checked_at': '2026-11-12T15:00:00Z',
                  'outcome': 'changed', 'differences': ['Start differs: app 9 AM; Google 10 AM.']},
@@ -460,6 +460,8 @@ with sync_playwright() as playwright:
     page.locator('#sign-in').click()
     page.locator('#admin-workspace').wait_for(state='visible')
     page.get_by_text('Start differs: app 9 AM; Google 10 AM.', exact=True).wait_for()
+    assert 'Last cancellation check:' in page.locator('#calendar-audit-status').inner_text()
+    assert 'Last detail audit:' in page.locator('#calendar-audit-status').inner_text()
     assert page.locator('#calendar-audit-issues img').count() == 0
     assert 'place released' in page.locator('#calendar-audit-issues').inner_text()
     assert page.locator('#all-calendars-link').get_attribute('href') == '/?showEvents=true'

@@ -75,7 +75,10 @@ async function renderCalendarAudit() {
     const data = await rpc('appt_admin_calendar_audit', {}, true);
     const last = data.last_checked ? dateFormat(data.last_checked) : 'Not checked yet';
     const stale = data.last_checked && Date.now() - new Date(data.last_checked).getTime() > 30 * 60 * 1000;
-    status.textContent = `Last check: ${last}. ${data.pending} awaiting first check.` +
+    const sync = data.cancellation_sync;
+    const cancellationStatus = sync?.last_polled ? `Last cancellation check: ${dateFormat(sync.last_polled)}.` : 'Cancellation check: waiting for first completed poll.';
+    const cancellationDelayed = sync?.last_polled && Date.now() - new Date(sync.last_polled).getTime() > 5 * 60 * 1000;
+    status.textContent = `${cancellationStatus} ${sync?.last_error || (cancellationDelayed ? 'Cancellation checks appear delayed.' : '')} Last detail audit: ${last}. ${data.pending} awaiting first audit.` +
       (stale ? ' Checks appear delayed; check the sync function logs.' : ' Use Refresh to load the latest results.');
     if (!data.issues.length) {
       const note = document.createElement('p');
@@ -93,7 +96,7 @@ async function renderCalendarAudit() {
       item.append(title, detail, differences); list.append(item);
     }
   } catch {
-    status.textContent = 'Calendar audit is not available yet. Apply database update 008 and deploy the updated sync function.';
+    status.textContent = 'Calendar audit is not available yet. Apply database updates 008 and 009 and deploy the updated sync function.';
   }
 }
 function updateReleaseField() {

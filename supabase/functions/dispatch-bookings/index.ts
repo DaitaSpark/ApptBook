@@ -1,4 +1,4 @@
-import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar, inspectCalendar} from './delivery.js';
+import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar, inspectCalendar, syncCancellations} from './delivery.js';
 
 const secrets = Object.fromEntries(['DISPATCH_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
   'RESEND_API_KEY', 'MAIL_FROM', 'TEAM_EMAIL', 'WORKSPACE_EMAIL', 'GOOGLE_CLIENT_ID',
@@ -43,6 +43,11 @@ Deno.serve(async request => {
       } catch (error) { errorText = error instanceof Error ? error.message : 'Delivery failed.'; }
       await rpc('appt_finish_job', {p_id: job.id, p_lease_token: job.lease_token, p_error: errorText});
     }
+    let cancellations = null, cancellationFailed = false;
+    if (googleConfigured && secrets.GOOGLE_CALENDAR_ID) {
+      try { cancellations = await syncCancellations(secrets, token, rpc, requestWithTimeout); }
+      catch { cancellationFailed = true; }
+    }
     let audited = 0, auditFailed = false;
     if (googleConfigured && secrets.GOOGLE_CALENDAR_ID) {
       try {
@@ -61,7 +66,7 @@ Deno.serve(async request => {
         }
       } catch { auditFailed = true; }
     }
-    return Response.json({processed: jobs.length, delivered, audited, audit_failed: auditFailed});
+    return Response.json({processed: jobs.length, delivered, audited, audit_failed: auditFailed, cancellations, cancellation_failed: cancellationFailed});
   } catch {
     // Do not expose provider responses, mailbox contents, or credentials in logs/responses.
     return Response.json({error: 'Delivery worker unavailable. Saved bookings remain queued for retry.'}, {status: 503});

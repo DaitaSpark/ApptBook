@@ -120,3 +120,44 @@ export async function inspectCalendar(booking, secrets, token, verified, request
   if (actual.recurrence?.length || actual.recurringEventId) differences.push('Google entry is recurring; app booking is a single meeting.');
   return result(differences.length ? 'changed' : 'ok', differences, true);
 }
+
+// Poll Google's incremental feed each minute; only cancellations affect bookings here.
+// Other event changes are compared by the separate 15-minute detail audit.
+export async function syncCancellations(secrets, token, rpc, request = fetch) {
+  const calendar = secrets.GOOGLE_CALENDAR_ID;
+  const cursor = await rpc('appt_claim_calendar_sync', {p_calendar_id: calendar});
+  if (!cursor) return {cancelled: 0, busy: true};
+  let pageToken = cursor.page_token, cancelled = 0;
+  const release = (reset = false, error = false) => rpc('appt_release_calendar_sync', {
+    p_calendar_id: calendar, p_lease_token: cursor.lease_token, p_reset: reset, p_error: error});
+  try {
+    for (let page = 0; page < 3; page++) {
+      const params = new URLSearchParams({showDeleted: 'true', singleEvents: 'false', maxResults: '250',
+        fields: 'items(id,status,extendedProperties),nextPageToken,nextSyncToken'});
+      if (cursor.sync_token) params.set('syncToken', cursor.sync_token);
+      if (pageToken) params.set('pageToken', pageToken);
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar)}/events?${params}`;
+      const response = await request(url, {headers: {Authorization: `Bearer ${token}`}});
+      if (response.status === 410) {
+        await release(true);
+        return {cancelled, rebuilding: true};
+      }
+      await checked(response, 'Calendar cancellations');
+      const data = await response.json();
+      if (!Array.isArray(data.items) || (!data.nextPageToken && !data.nextSyncToken))
+        throw new Error('Calendar cancellation response is incomplete.');
+      const items = data.items.map(item => ({id: item.id, status: item.status,
+        booking_id: item.extendedProperties?.private?.appt_booking_id || null}));
+      cancelled += await rpc('appt_apply_calendar_sync_page', {p_calendar_id: calendar, p_lease_token: cursor.lease_token,
+        p_items: items, p_next_page: data.nextPageToken || null, p_next_sync: data.nextPageToken ? null : data.nextSyncToken});
+      if (!data.nextPageToken) return {cancelled, polled: true};
+      pageToken = data.nextPageToken;
+    }
+    // Continue large calendars on the next invocation using the last committed page.
+    await release();
+    return {cancelled, backlog: true};
+  } catch (error) {
+    await release(false, true);
+    throw error;
+  }
+}

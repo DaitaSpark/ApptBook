@@ -18,6 +18,7 @@ environment = {...environment, RESEND_API_KEY: 'provider-only', MAIL_FROM: 'appo
 const acknowledgments = [];
 globalThis.fetch = async (url, init) => {
   calls.push(url);
+  if (url.endsWith('/appt_claim_calendar_sync')) return Response.json(null);
   if (url.endsWith('/appt_claim_calendar_audit')) return Response.json([]);
   if (url.endsWith('/appt_claim_jobs')) {
     assert.equal(init.headers.Authorization, 'Bearer server-only');
@@ -47,6 +48,7 @@ environment = {...environment, GOOGLE_CLIENT_ID: 'client', GOOGLE_CLIENT_SECRET:
 const cleanup = [];
 globalThis.fetch = async (url, init) => {
   if (url === 'https://oauth2.googleapis.com/token') return Response.json({access_token: 'google-token'});
+  if (url.endsWith('/appt_claim_calendar_sync')) return Response.json(null);
   if (url.endsWith('/appt_claim_calendar_audit')) return Response.json([]);
   if (url.endsWith('/appt_claim_jobs')) {
     assert(JSON.parse(init.body).p_kinds.includes('calendar_delete'));
@@ -73,6 +75,7 @@ const syncedBooking = {id:'11111111-2222-4333-8444-555555555555',name:'Guest',ev
 const syncCalls = [];
 globalThis.fetch = async (url,init) => {
   if(url === 'https://oauth2.googleapis.com/token') return Response.json({access_token:'token'});
+  if(url.endsWith('/appt_claim_calendar_sync')) return Response.json(null);
   if(url.endsWith('/appt_claim_jobs')) return Response.json([{id:'create',kind:'calendar',lease_token:'outbound',booking:syncedBooking}]);
   if(url.includes('/calendar/v3/')) {
     syncCalls.push(init.method || 'GET');
@@ -93,3 +96,21 @@ const synced=await (await handler(authorized())).json();
 assert.equal(synced.delivered,1);assert.equal(synced.audited,1);assert.equal(synced.audit_failed,false);
 assert.deepEqual(syncCalls,['POST','bound','acknowledged','GET','cancelled']);
 console.log('PASS worker binds successful deliveries before acknowledgment and applies verified inbound cancellations through leased RPC');
+
+let minutePolls=0, detailClaims=0, pageCommits=0;
+globalThis.fetch=async(url,init)=>{
+  if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'token'});
+  if(url.endsWith('/appt_claim_jobs'))return Response.json([]);
+  if(url.endsWith('/appt_claim_calendar_sync')) {minutePolls++;return Response.json({lease_token:'minute-lease',sync_token:'cursor'});}
+  if(url.includes('/calendar/v3/'))return Response.json({items:[{id:'appt11111111222243338444555555555555',status:'cancelled'}],nextSyncToken:'next'});
+  if(url.endsWith('/appt_apply_calendar_sync_page')) {pageCommits++;assert.equal(JSON.parse(init.body).p_items[0].status,'cancelled');return Response.json(1);}
+  if(url.endsWith('/appt_claim_calendar_audit')) {detailClaims++;return Response.json([]);}
+  throw new Error('Unexpected minute worker request');
+};
+await import('../supabase/functions/dispatch-bookings/index.ts?minute');
+for(let minute=0;minute<2;minute++) {
+  const result=await (await handler(authorized())).json();
+  assert.equal(result.cancellations.polled,true);assert.equal(result.cancellation_failed,false);assert.equal(result.audited,0);
+}
+assert.equal(minutePolls,2);assert.equal(pageCommits,2);assert.equal(detailClaims,2);
+console.log('PASS every worker invocation polls cancellations even when no bookings need delivery or detail auditing');
