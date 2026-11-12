@@ -300,7 +300,7 @@ with sync_playwright() as playwright:
         fill_guest(page)
         page.locator('#book-button').click()
         page.locator('#confirmation').wait_for(state='visible')
-        assert page.locator('#confirmation-location').inner_text() == 'Booth 5596 (Back right wall of Convention Floor)'
+        assert page.locator('#confirmation-location').inner_text() == 'Booth #5596 (On the Right side of the Back Wall of the Convention Floor).'
         assert page.locator('#event-choice').is_disabled()
         page.locator('#another-booking').click()
         page.locator('.has-availability').first.wait_for(state='attached')

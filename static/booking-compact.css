@@ -105,6 +105,7 @@ body.booking-page footer { margin-top: 14px; padding-top: 10px; padding-bottom: 
 .booking-page .day-times .time .last-place-label { color: #b42318; font-weight: 700; }
 .booking-page .day-times .time.selected .last-place-label { color: #ffb4a9; }
 
+.booking-page #confirmation-location mark { background-color: #ffff00; color: #000; }
 .booking-page .last-place-fire .flame-motion { display: none; }
 .booking-page .last-place-fire .flame-still { display: inline; }
 .booking-page.flame-animation-on .last-place-fire .flame-motion { display: inline; }

@@ -182,7 +182,7 @@ Activation test: after deploying, wait until Admin shows a completed cancellatio
 
 ## PGA confirmation and calendar title presentation
 
-PGA events (names starting with the word PGA) show `Booth 5596 (Back right wall of Convention Floor)` on the public confirmation screen. This is a display override; event/booking records and the calendar location field are unchanged. New Google entries for PGA use a title such as `Jeff E - PGA`, using the first name and initial of the final name component. Single names use `Madonna - PGA`. The full supplied name remains stored and included in the shared calendar description, admin views, and exports. Other events retain their existing display behavior.
+PGA events (names starting with the word PGA) show `Booth #5596 (On the Right side of the Back Wall of the Convention Floor).` in bold with a yellow highlight on the public confirmation screen. This is a display override; event/booking records and the calendar location field are unchanged. New Google entries for PGA use a title such as `Jeff E - PGA`, using the first name and initial of the final name component. Single names use `Madonna - PGA`. The full supplied name remains stored and included in the shared calendar description, admin views, and exports. Other events retain their existing display behavior.
 
 Deploy the updated `delivery.js` in `dispatch-bookings` to activate the title format. No database migration or scheduler change is needed. Previously delivered calendar entries are not renamed automatically; the detail audit can flag their old titles as a difference from the new format.
 
