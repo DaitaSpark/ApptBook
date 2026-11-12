@@ -90,3 +90,23 @@ body.booking-page footer { margin-top: 14px; padding-top: 10px; padding-bottom: 
   .booking-page .calendar-day { min-height: 31px; }
   .booking-page .booking-description { display: none; }
 }
+
+/* A larger flame fits beside the remaining-place label without increasing tile height. */
+.booking-page .last-place-fire {
+  display: inline-block;
+  width: 24px;
+  margin-left: 2px;
+  font-size: 20px;
+  line-height: 0;
+  vertical-align: -3px;
+  transform-origin: 50% 80%;
+  animation: last-place-flicker 1.2s ease-in-out infinite;
+}
+@keyframes last-place-flicker {
+  0%, 100% { transform: rotate(-5deg) scale(1); }
+  35% { transform: rotate(5deg) scale(1.12); }
+  65% { transform: rotate(-3deg) scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .booking-page .last-place-fire { animation: none; }
+}
