@@ -4,17 +4,39 @@ let cfg, events = [], slots = [], selectedEvent, selectedDate, selectedSlot, req
 let months = [], monthIndex = 0, loadSequence = 0, saving = false, previewData;
 // Inline SVG avoids image-level animation freezing on mobile browsers.
 let flameSource, flameSequence = 0;
-const flameMotionPreference = matchMedia('(prefers-reduced-motion: reduce)');
-function syncFlameMotion() {
-  if (document.hidden) return;
+// Match BevStats: decorative motion defaults on and has its own saved app setting.
+function readFlamePreference() {
+  try { return localStorage.getItem('apptbook.animations.v1') !== 'off'; }
+  catch { return true; }
+}
+let flameAnimationsEnabled = readFlamePreference();
+const flameToggle = el('flame-motion-toggle');
+function syncFlameMotion(restart = false) {
+  document.body.classList.toggle('flame-animation-on', flameAnimationsEnabled);
+  flameToggle.textContent = `Animation: ${flameAnimationsEnabled ? 'On' : 'Off'}`;
+  flameToggle.setAttribute('aria-pressed', String(flameAnimationsEnabled));
   document.querySelectorAll('.last-place-fire svg').forEach(svg => {
-    if (flameMotionPreference.matches) svg.pauseAnimations();
-    else svg.unpauseAnimations();
+    if (document.hidden || !flameAnimationsEnabled) svg.pauseAnimations();
+    else {
+      if (restart) svg.setCurrentTime(0);
+      svg.unpauseAnimations();
+    }
   });
 }
-flameMotionPreference.addEventListener('change', syncFlameMotion);
-window.addEventListener('pageshow', syncFlameMotion);
-document.addEventListener('visibilitychange', syncFlameMotion);
+flameToggle.addEventListener('click', () => {
+  flameAnimationsEnabled = !flameAnimationsEnabled;
+  try { localStorage.setItem('apptbook.animations.v1', flameAnimationsEnabled ? 'on' : 'off'); } catch {}
+  syncFlameMotion(true);
+});
+const flameObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
+  for (const entry of entries) if (entry.isIntersecting) {
+    if (flameAnimationsEnabled) { entry.target.setCurrentTime(0); entry.target.unpauseAnimations(); }
+    flameObserver.unobserve(entry.target);
+  }
+}, {threshold: .1}) : null;
+window.addEventListener('pageshow', () => syncFlameMotion(true));
+document.addEventListener('visibilitychange', () => syncFlameMotion(true));
+syncFlameMotion();
 async function animateFlame(container) {
   try {
     flameSource ||= fetch('/flame.svg?v=inline-1').then(response => {
@@ -36,9 +58,10 @@ async function animateFlame(container) {
     svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false');
     svg.setAttribute('width', '26'); svg.setAttribute('height', '34');
     container.replaceChildren(svg);
-    syncFlameMotion();
+    flameObserver?.observe(svg);
+    syncFlameMotion(true);
   } catch {
-    // Keep the image fallback if artwork fails to load; booking stays usable.
+    // Keep the still flame fallback if artwork fails to load; booking stays usable.
   }
 }
 const form = el('booking-form');
@@ -105,6 +128,7 @@ function stage(value) {
 function clearSelection() {
   selectedDate = selectedSlot = requestId = null;
   viewTimes.hidden = true;
+  flameToggle.hidden = true;
   form.hidden = true;
   el('book-button').disabled = true;
   el('details-placeholder').hidden = false;
@@ -174,8 +198,8 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
       const fire = document.createElement('span');
       fire.className = 'last-place-fire';
       fire.setAttribute('aria-hidden', 'true');
-      const flame = document.createElement('img');
-      flame.src = '/flame.svg?v=inline-1'; flame.alt = ''; flame.width = 26; flame.height = 34;
+      const flame = document.createElement('span');
+      flame.className = 'flame-fallback'; flame.textContent = '\u{1F525}';
       fire.append(flame);
       remaining.append(fire);
     }
@@ -185,6 +209,7 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
     const fire = button.querySelector('.last-place-fire');
     if (fire) void animateFlame(fire);
   }
+  flameToggle.hidden = !times.querySelector('.last-place-fire');
   steps.find(button => button.dataset.step === 'time').disabled = false;
   stage(automatic ? 'date' : 'time');
   if (!automatic && focus) showTimes();
