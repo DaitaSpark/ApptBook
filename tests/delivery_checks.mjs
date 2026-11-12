@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar} from '../supabase/functions/dispatch-bookings/delivery.js';
+import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar, calendarPayload} from '../supabase/functions/dispatch-bookings/delivery.js';
 
 const booking = {id: '11111111-2222-4333-8444-555555555555', name: 'Guest', email: 'guest@example.com',
   phone: '555-0100', company: 'Pine Valley Golf Club', source_label: 'Jeff sales link', source_kind: 'salesperson', notes: 'Private team note', event_name: 'JR Golf', location: 'Office',
@@ -55,3 +55,16 @@ await removeCalendar(booking, secrets, 'token', async () => new Response('{}', {
 await removeCalendar(booking, secrets, 'token', async () => new Response('{}', {status: 410}));
 await assert.rejects(removeCalendar(booking, secrets, 'token', async () => Response.json({})), /ID conflict/);
 console.log('PASS calendar removal verifies ownership, accepts already removed events, and retries safely');
+
+const pgaBooking = Object.freeze({...booking, name: 'Jeff Eckard', event_name: 'PGA Show'});
+const pgaPayload = calendarPayload(pgaBooking);
+assert.equal(pgaPayload.summary,'Jeff E - PGA');
+assert(pgaPayload.description.includes('Jeff Eckard'));
+assert.equal(pgaPayload.id,calendarPayload(booking).id);
+assert.equal(pgaPayload.location,booking.location);
+assert.equal(pgaBooking.name,'Jeff Eckard');
+assert.equal(calendarPayload({...pgaBooking,name:'  Justin  Michael   Eckard  '}).summary,'Justin E - PGA');
+assert.equal(calendarPayload({...pgaBooking,name:'Madonna'}).summary,'Madonna - PGA');
+assert.equal(calendarPayload({...pgaBooking,name:'Zo? ?ckard',event_name:'PGA Show 2027'}).summary,'Zo? ? - PGA');
+assert.equal(calendarPayload({...pgaBooking,event_name:'Other event'}).summary,'Other event \u2014 Jeff Eckard');
+console.log('PASS PGA display titles abbreviate surnames without changing stored names, details, event IDs or other events');

@@ -50,9 +50,17 @@ export async function deliverEmail(booking, secrets, token, request = fetch) {
   }
 }
 
+// Presentation only: full guest names remain in the booking and calendar description.
+const calendarTitle = booking => {
+  if (!/^PGA\b/i.test(booking.event_name.trim())) return `${booking.event_name} \u2014 ${booking.name}`;
+  const parts = booking.name.trim().split(/\s+/);
+  const shortName = parts.length > 1 ? `${parts[0]} ${Array.from(parts.at(-1))[0].toLocaleUpperCase('en-US')}` : parts[0];
+  return `${shortName} - PGA`;
+};
+
 export const calendarPayload = booking => {
   const eventId = 'appt' + booking.id.replaceAll('-', '');
-  return {id: eventId, summary: `${booking.event_name} — ${booking.name}`,
+  return {id: eventId, summary: calendarTitle(booking),
       location: booking.location, description: [booking.name, booking.email, booking.phone,
         booking.company ? `Company / Golf Course: ${booking.company}` : '',
         `Source: ${booking.source_label || 'Direct / untracked'}${booking.source_label && booking.source_kind ? ` (${booking.source_kind})` : ''}`,

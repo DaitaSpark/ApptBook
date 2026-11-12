@@ -232,7 +232,8 @@ form.addEventListener('submit', async event => {
     el('confirmation-name').textContent = `See you then, ${receipt.name}.`;
     el('confirmation-event').textContent = receipt.event_name;
     el('confirmation-time').textContent = `${eastern(receipt.starts_at, {dateStyle: 'full', timeStyle: 'short'})} Eastern`;
-    el('confirmation-location').textContent = receipt.location || 'Location to be arranged';
+    el('confirmation-location').textContent = /^PGA\b/i.test(receipt.event_name.trim()) ?
+      'Booth 5596 (Back right wall of Convention Floor)' : receipt.location || 'Location to be arranged';
     el('confirmation-email').textContent = values.email.trim() ? 'Your appointment is saved. Email confirmation is pending; save these details for your records.' :
       'Your appointment is saved. Save these details for your records.';
     el('confirmation-reference').textContent = `Booking reference: ${receipt.id}`;

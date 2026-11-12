@@ -69,7 +69,7 @@ def mocked(page, mode='success'):
                 data = {'message': 'That time is no longer available.'}
             else:
                 data = {'id': '66666666-6666-4666-8666-666666666666', 'name': body['p_name'],
-                        'event_name': EVENTS[0]['name'], 'starts_at': SLOTS[0]['starts_at'],
+                        'event_name': 'PGA Show' if mode == 'pga' else EVENTS[0]['name'], 'starts_at': SLOTS[0]['starts_at'],
                         'ends_at': SLOTS[0]['ends_at'], 'location': ''}
         elif path == 'appt_ref_valid':
             data = mode != 'invalid-ref' and body['p_token'] == 'a' * 32
@@ -298,6 +298,7 @@ with sync_playwright() as playwright:
         fill_guest(page)
         page.locator('#book-button').click()
         page.locator('#confirmation').wait_for(state='visible')
+        assert page.locator('#confirmation-location').inner_text() == 'Booth 5596 (Back right wall of Convention Floor)'
         assert page.locator('#event-choice').is_disabled()
         page.locator('#another-booking').click()
         page.locator('.has-availability').first.wait_for(state='attached')
