@@ -130,6 +130,7 @@ function chooseDate(day, {focus = true, automatic = false} = {}) {
     remaining.textContent = button.disabled ? (slot.remaining > 0 ? 'Not available' : 'Fully booked') :
       `${slot.remaining} ${slot.remaining === 1 ? 'place' : 'places'} left`;
     if (!button.disabled && slot.remaining === 1 && selectedEvent.name.trim() !== 'JR & Co. Appointments') {
+      remaining.classList.add('last-place-label');
       const fire = document.createElement('span');
       fire.className = 'last-place-fire';
       fire.setAttribute('aria-hidden', 'true');
