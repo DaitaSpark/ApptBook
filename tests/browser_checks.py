@@ -41,6 +41,8 @@ def mocked(page, mode='success'):
             data = {}
         elif path == 'appt_public_events':
             data = [EVENTS[0], dict(EVENTS[1], name='PGA Show', open_times_per_day=3 if mode == 'staged' else None)] if mode in ['pga', 'staged'] else EVENTS
+            if mode == 'single-event':
+                data = [EVENTS[0]]
         elif path == 'appt_public_slots':
             data = [dict(slot, remaining=0 if state['full'] and slot['id'] == SLOT else slot['remaining']) for slot in SLOTS]
             if body['p_event_id'] == OTHER:
@@ -101,6 +103,9 @@ def mocked(page, mode='success'):
             state['refs'].append(data)
         elif path == 'appt_admin_set_referral':
             state['refs'][0]['active'] = body['p_active']
+            data = None
+        elif path == 'appt_admin_delete_referral':
+            state['refs'] = [link for link in state['refs'] if link['id'] != body['p_id']]
             data = None
         else:
             raise AssertionError(f'Unexpected request: {request.url}')
@@ -342,6 +347,24 @@ with sync_playwright() as playwright:
         print('PASS only explicit showEvents=true unlocks an event link')
         page.close()
 
+    for width in [1366, 390]:
+        page = browser.new_page(viewport={'width': width, 'height': 844})
+        mocked(page, 'single-event')
+        page.goto(f'{URL}/?showEvents=true')
+        page.locator('#event-picker').wait_for(state='visible')
+        assert page.locator('#event-choice').is_enabled()
+        assert page.locator('#event-choice option').count() == 1
+        print('PASS explicit showEvents=true always displays the selector, including a single calendar')
+        page.close()
+    page = browser.new_page()
+    mocked(page)
+    page.goto(f'{URL}/?event={OTHER}?showEvents=true')
+    page.locator('#event-picker').wait_for(state='visible')
+    assert page.locator('#event-choice').input_value() == OTHER
+    assert f'event={OTHER}&showEvents=true' in page.url
+    print('PASS an accidental second question mark before showEvents is corrected')
+    page.close()
+
     for width, height in [(1366, 768), (390, 844)]:
         page = browser.new_page(viewport={'width': width, 'height': height})
         page.clock.install()
@@ -419,6 +442,7 @@ with sync_playwright() as playwright:
     page.locator('[name="password"]').fill('test-only')
     page.locator('#sign-in').click()
     page.locator('#admin-workspace').wait_for(state='visible')
+    assert page.locator('#all-calendars-link').get_attribute('href') == '/?showEvents=true'
     assert page.locator('#bookings-table img').count() == 0
     assert '<img' in page.locator('#bookings-table').inner_text()
     assert 'Jeff' in page.locator('#bookings-table').inner_text()
@@ -459,6 +483,16 @@ with sync_playwright() as playwright:
     csv = Path(download.value.path()).read_text(encoding='utf-8-sig')
     assert "'=1+1" in csv
     assert 'Jeff' in csv and 'salesperson' in csv
+    def dismiss_delete(dialog):
+        dialog.dismiss()
+    page.once('dialog', dismiss_delete)
+    page.locator('#referral-links').get_by_role('button', name='Delete link').click()
+    assert page.locator('#referral-links input').count() == 1
+    assert not any(path == 'appt_admin_delete_referral' for path, body in calls)
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#referral-links').get_by_role('button', name='Delete link').click()
+    page.wait_for_function("document.querySelectorAll('#referral-links input').length === 0")
+    assert 'Jeff' in page.locator('#bookings-table').inner_text()
     page.locator('#sign-out').click()
     page.locator('#login-panel').wait_for(state='visible')
     assert page.evaluate("sessionStorage.getItem('jrco-admin-session')") is None

@@ -82,7 +82,20 @@ function renderReferralLinks(links) {
         await dashboard(); notify('Tracking link updated. Existing booking attribution was preserved.');
       } catch (error) { notify(error.message, true); toggle.disabled = false; }
     });
-    const actions = document.createElement('div'); actions.className = 'referral-actions'; actions.append(copy, toggle);
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary delete-link';
+    remove.textContent = 'Delete link';
+    remove.addEventListener('click', async () => {
+      if (!confirm(`Delete the link for ${source.label}? It will disappear and stop accepting bookings. Existing bookings and their recorded source will be kept.`)) return;
+      remove.disabled = true;
+      try {
+        await rpc('appt_admin_delete_referral', {p_id: source.id}, true);
+        await dashboard(); notify('Tracking link deleted. Existing bookings and attribution were kept.');
+      } catch (error) {
+        notify(error.code === 'PGRST202' ? 'Run database update 004_delete_tracking_links.sql in Supabase SQL Editor to enable link deletion.' : error.message, true);
+        remove.disabled = false;
+      }
+    });
+    const actions = document.createElement('div'); actions.className = 'referral-actions'; actions.append(copy, toggle, remove);
     row.append(title, input, actions); container.append(row);
   }
 }

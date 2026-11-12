@@ -23,7 +23,13 @@ el('change-date').addEventListener('click', () => {
   stage('date');
   document.querySelector('.calendar-day.selected')?.focus({preventScroll: true});
 });
-const eventParameters = new URLSearchParams(location.search);
+// Accept a second '?' before the flag, a common mistake when extending an event URL.
+const normalizedSearch = location.search.slice(1).replace(/\?(?=showEvents=)/g, '&');
+const eventParameters = new URLSearchParams(normalizedSearch);
+if (normalizedSearch !== location.search.slice(1)) {
+  const corrected = new URL(location.href); corrected.search = eventParameters.toString();
+  history.replaceState(null, '', corrected);
+}
 const hasLinkedEvent = eventParameters.has('event');
 const showEvents = eventParameters.get('showEvents') === 'true';
 const eventLocked = hasLinkedEvent && !showEvents;
@@ -268,7 +274,7 @@ async function init() {
     if (!events.length) { el('availability-status').textContent = 'New appointments are on the way. Please check back soon.'; return; }
     el('event-bar').hidden = false;
     if (eventLocked) events = [linkedEvent];
-    el('event-picker').hidden = eventLocked || events.length < 2;
+    el('event-picker').hidden = eventLocked || (!showEvents && events.length < 2);
     el('event-choice').disabled = eventLocked;
     el('event-choice').replaceChildren(...events.map(event => option(event.id, event.name)));
     const selected = linkedEvent || events[0];
