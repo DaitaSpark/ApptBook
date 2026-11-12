@@ -2,7 +2,7 @@ import {settings, rpc, el, notify, currentSession, signIn, signOut, localTimesta
 let events = [];
 const dateFormat = value => eastern(value, {dateStyle: 'medium', timeStyle: 'short'});
 const stateLabel = value => ({queued: 'pending', processing: 'sending', sent: 'sent', failed: 'needs attention',
-  not_requested: 'not requested'})[value] || 'pending';
+  skipped: 'not sent (before email activation)', not_requested: 'not requested'})[value] || 'pending';
 const cell = text => { const node = document.createElement('td'); node.textContent = text || ''; return node; };
 
 async function dashboard() {

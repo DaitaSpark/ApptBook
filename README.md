@@ -80,6 +80,12 @@ Alternatively create a **new Blueprint** using `render.yaml`; it declares the sa
 
 ## Email and Google Workspace calendar
 
+For activation from `Jeff@jrcogolf.com` without emailing historical test bookings,
+follow [the email setup checklist](supabase/EMAIL_SETUP.md). Apply migration 012
+before configuring a sender, then run `supabase/activate-email.sql` only when
+Google authorization and worker secrets are ready. This cutoff permanently
+excludes bookings created before activation, including tests for future dates.
+
 Bookings and capacity updates commit in a single database transaction. Two private delivery jobs (email and calendar) are created in that same transaction. Delivery runs separately and retries with exponential backoff. The browser never gets a provider credential. Until a worker/provider is configured, confirmations show **pending**, and appointments remain safely saved.
 
 Deploy `supabase/functions/dispatch-bookings` using the Supabase CLI or dashboard. `supabase/config.toml` disables gateway JWT checks for this server-to-server endpoint; the function itself requires a high-entropy `x-dispatch-secret` and rejects missing/wrong values. It never allows browser-triggered dispatch. Set a random `DISPATCH_SECRET` in Edge Function secrets, not Render. Supabase supplies `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to the function.
