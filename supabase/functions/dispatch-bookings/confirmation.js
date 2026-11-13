@@ -15,7 +15,7 @@ export function confirmationEmail(booking) {
   const meetingTime = `${formatted(booking.starts_at)} Eastern Time`;
   const text = `Hey ${firstName},\n\nYour meeting is confirmed. Thank you!\n${welcome}\n\n` +
     `${pga ? 'See you at ' : 'Location: '}${location}\n\n${booking.event_name}\n${meetingTime}\n` +
-    `\nUntil we see you, feel free to look through our latest catalogue:\n` +
+    `\nSee the industry’s best designs in our new catalogue:\n` +
     `${catalogueUrl}\n\nThank you,\nJR & Co.\nhttps://jrcogolf.com/`;
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#eeefeb;color:#111511;font-family:Arial,Helvetica,sans-serif;">
@@ -30,8 +30,7 @@ export function confirmationEmail(booking) {
 <p style="margin:0;font-size:16px;line-height:1.4;color:#355541;"><strong>${pga ? 'See you at Booth #5596' : escapeHtml(location)}</strong>${pga ? '<br>On the Right side of the Back Wall of the Convention Floor.' : ''}</p>
 </td></tr></table></td></tr>
 <tr><td align="center" style="padding:0 22px 20px;">
-<p style="margin:0 0 12px;font-size:15px;line-height:1.4;">Until we see you, explore our latest catalogue.</p>
-<table role="presentation" cellpadding="0" cellspacing="0"><tr><td bgcolor="#355541" style="border-radius:3px;"><a href="${catalogueUrl}" style="display:inline-block;padding:14px 22px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;">Explore our latest catalogue &#8599;</a></td></tr></table>
+<table role="presentation" cellpadding="0" cellspacing="0"><tr><td bgcolor="#355541" style="border-radius:3px;"><a href="${catalogueUrl}" style="display:inline-block;padding:14px 22px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;">See the industry&#8217;s best designs in our new catalogue &#8599;</a></td></tr></table>
 </td></tr>
 <tr><td bgcolor="#10130f" style="padding:15px 22px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
 <td style="font-family:Georgia,serif;font-size:25px;font-weight:bold;font-style:italic;color:#ffffff;">JR &amp; Co.</td>
