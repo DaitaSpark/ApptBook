@@ -322,7 +322,6 @@ form.addEventListener('submit', async event => {
     }
     el('confirmation-email').textContent = values.email.trim() ? 'Your appointment is saved. Email confirmation is pending; save these details for your records.' :
       'Your appointment is saved. Save these details for your records.';
-    el('confirmation-reference').textContent = `Booking reference: ${receipt.id}`;
     el('booking-workspace').hidden = true;
     el('confirmation').hidden = false;
     form.reset();
