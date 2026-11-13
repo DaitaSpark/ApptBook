@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar, calendarPayload} from '../supabase/functions/dispatch-bookings/delivery.js';
+import {confirmationEmail, catalogueUrl} from '../supabase/functions/dispatch-bookings/confirmation.js';
 
 const booking = {id: '11111111-2222-4333-8444-555555555555', name: 'Guest', email: 'guest@example.com',
   phone: '555-0100', company: 'Pine Valley Golf Club', source_label: 'Jeff sales link', source_kind: 'salesperson', notes: 'Private team note', event_name: 'JR Golf', location: 'Office',
@@ -15,6 +16,9 @@ assert.deepEqual(payload.bcc, [secrets.TEAM_EMAIL]);
 assert.equal(calls.at(-1).init.headers['Idempotency-Key'], `appointment-${booking.id}`);
 assert(!payload.text.includes(booking.notes));
 assert(!payload.text.includes(booking.source_label));
+assert(payload.html.includes('cid:jrco-confirmation'));
+assert.equal(payload.attachments[0].content_id, 'jrco-confirmation');
+assert.equal(payload.attachments[0].content_type, 'image/gif');
 await deliverEmail({...booking, email: ''}, secrets, '', success);
 assert.deepEqual(JSON.parse(calls.at(-1).init.body).to, [secrets.TEAM_EMAIL]);
 console.log('PASS email recipients, team notifications, privacy, and Resend idempotency');
@@ -25,7 +29,32 @@ const mime = Buffer.from(payload.raw, 'base64url').toString();
 assert(mime.includes('Bcc: team@example.com'));
 assert(!mime.includes('\r\nBcc: attacker@example.com'));
 assert(calls.at(-1).url.includes('gmail/v1/users/me/messages/send'));
+assert(mime.includes('Content-Type: multipart/related;'));
+assert(mime.includes('Content-Type: multipart/alternative;'));
+assert(mime.includes('Content-ID: <jrco-confirmation>'));
+assert(mime.includes('Content-Disposition: inline;'));
 console.log('PASS Gmail MIME encoding and header injection protection');
+
+const card = confirmationEmail({...booking, name: '  Jeff Eckard ', event_name: 'PGA Show'});
+assert(card.html.includes('Hey Jeff,'));
+assert(card.html.includes('See you at Booth #5596'));
+assert(card.html.includes('On the Right side of the Back Wall'));
+assert(card.html.includes(catalogueUrl));
+assert(card.text.includes(catalogueUrl));
+assert(card.text.includes('Booth #5596'));
+assert(card.text.includes('Eastern Time'));
+assert(!card.html.includes(booking.notes));
+assert(!card.html.includes(booking.source_label));
+assert(!card.html.includes(booking.phone));
+assert(!confirmationEmail(booking).html.includes('Booth #5596'));
+const unsafeCard = confirmationEmail({...booking, name: '<img onerror=alert(1)>',
+  event_name: '<script>bad</script>', location: '<iframe>'});
+assert(!unsafeCard.html.includes('<script>'));
+assert(!unsafeCard.html.includes('<iframe>'));
+assert(unsafeCard.html.includes('&lt;img'));
+assert(unsafeCard.html.includes('&lt;script&gt;'));
+assert.equal(Buffer.from(card.attachment.content, 'base64').subarray(0,6).toString(), 'GIF89a');
+console.log('PASS personalized email cards, PGA-only booth directions, catalogue, inline GIF and escaped/private guest fields');
 
 await deliverCalendar(booking, secrets, 'token', success);
 payload = JSON.parse(calls.at(-1).init.body);

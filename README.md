@@ -80,6 +80,27 @@ Alternatively create a **new Blueprint** using `render.yaml`; it declares the sa
 
 ## Email and Google Workspace calendar
 
+Confirmation emails now include a first-name greeting, an inline animated confetti
+GIF, meeting details, and the existing wholesale catalogue link. PGA events also
+include Booth #5596 and the same directions shown on the confirmation screen.
+Other events retain their own location. Plain-text alternatives contain all
+appointment details and the catalogue URL. No private guest notes or tracking
+source labels appear in either version.
+
+To deploy this email design, update `delivery.js` and add `confirmation.js` plus
+`confirmation-image.js` to the existing `dispatch-bookings` Edge Function, then
+redeploy. Preserve its existing entrypoint, authentication settings, secrets and
+schedule. No SQL or email reactivation is needed, and historical/skipped jobs
+remain excluded. Only future deliveries use the new design. The inline GIF is
+bundled, so no public image URL or Render deployment is required for email.
+Some email clients show only the first frame; the first frame is a complete
+card hero and all personalized details also appear as live HTML/text.
+
+Run `node scripts/preview_confirmation.mjs` to generate local HTML and `.eml`
+previews under the ignored `instance/email-preview/` directory without sending
+mail. The GIF source generator is `scripts/build_confirmation_gif.py` (Pillow
+and the Windows Georgia fonts are only needed when rebuilding the artwork).
+
 For activation from `Jeff@jrcogolf.com` without emailing historical test bookings,
 follow [the email setup checklist](supabase/EMAIL_SETUP.md). Apply migration 012
 before configuring a sender, then run `supabase/activate-email.sql` only when

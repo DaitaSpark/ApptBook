@@ -1,5 +1,5 @@
-const formatted = value => new Intl.DateTimeFormat('en-US', {timeZone: 'America/New_York',
-  dateStyle: 'full', timeStyle: 'short'}).format(new Date(value));
+import {confirmationEmail} from './confirmation.js';
+
 const cleanHeader = value => String(value).replace(/[\r\n]/g, ' ');
 const base64 = text => {
   const bytes = new TextEncoder().encode(text);
@@ -27,17 +27,26 @@ export async function deliverEmail(booking, secrets, token, request = fetch) {
   const recipient = booking.email || mailbox;
   if (!recipient) throw new Error('No email recipient configured for phone-only booking notification.');
   const subject = `JR & Co. appointment: ${booking.event_name}`;
-  // Private notes and phone numbers go only in the calendar, not in guest confirmation copies.
-  const text = `Hello ${booking.name},\n\nYour appointment is confirmed.\n\n${booking.event_name}\n` +
-    `${formatted(booking.starts_at)} Eastern Time\nLocation: ${booking.location || 'To be arranged'}\n` +
-    `Booking reference: ${booking.id}\n\nThank you,\nJR & Co.`;
+  const {text, html, attachment} = confirmationEmail(booking);
   if (token && secrets.WORKSPACE_EMAIL) {
+    // MIME boundaries are independent of guest input. Wrap base64 at RFC line length.
+    const related = `related_${crypto.randomUUID()}`;
+    const alternative = `alternative_${crypto.randomUUID()}`;
+    const wrapped = value => value.match(/.{1,76}/g)?.join('\r\n') || '';
     const message = [`From: ${cleanHeader(secrets.WORKSPACE_EMAIL)}`, `To: ${cleanHeader(recipient)}`,
       ...(booking.email && mailbox && mailbox !== booking.email ? [`Bcc: ${cleanHeader(mailbox)}`] : []),
       `Subject: =?UTF-8?B?${base64(cleanHeader(subject))}?=`,
       `Message-ID: <appt-${booking.id}@${cleanHeader(secrets.WORKSPACE_EMAIL.split('@')[1])}>`,
-      'MIME-Version: 1.0', 'Content-Type: text/plain; charset=UTF-8',
-      'Content-Transfer-Encoding: base64', '', base64(text)].join('\r\n');
+      'MIME-Version: 1.0', `Content-Type: multipart/related; boundary="${related}"`, '',
+      `--${related}`, `Content-Type: multipart/alternative; boundary="${alternative}"`, '',
+      `--${alternative}`, 'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: base64', '', wrapped(base64(text)),
+      `--${alternative}`, 'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: base64', '', wrapped(base64(html)), `--${alternative}--`, '',
+      `--${related}`, 'Content-Type: image/gif; name="confirmation-confetti.gif"',
+      'Content-Disposition: inline; filename="confirmation-confetti.gif"',
+      'Content-ID: <jrco-confirmation>', 'Content-Transfer-Encoding: base64', '',
+      wrapped(attachment.content), `--${related}--`, ''].join('\r\n');
     await checked(await request('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST', headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
       body: JSON.stringify({raw: base64(message).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')})}), 'Gmail');
@@ -45,7 +54,7 @@ export async function deliverEmail(booking, secrets, token, request = fetch) {
     await checked(await request('https://api.resend.com/emails', {method: 'POST', headers: {
       Authorization: `Bearer ${secrets.RESEND_API_KEY}`, 'Content-Type': 'application/json',
       'Idempotency-Key': `appointment-${booking.id}`}, body: JSON.stringify({
-        from: secrets.MAIL_FROM, to: [recipient], subject, text,
+        from: secrets.MAIL_FROM, to: [recipient], subject, text, html, attachments: [attachment],
         ...(booking.email && mailbox && mailbox !== booking.email ? {bcc: [mailbox]} : {})})}), 'Email');
   }
 }
