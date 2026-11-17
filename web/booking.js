@@ -1,4 +1,4 @@
-import {settings, rpc, el, notify, eastern, localTimestamp, option} from './api.js';
+import {settings, rpc, sendTestConfirmation, el, notify, eastern, localTimestamp, option} from './api.js';
 
 let cfg, events = [], slots = [], selectedEvent, selectedDate, selectedSlot, requestId;
 let months = [], monthIndex = 0, loadSequence = 0, saving = false, previewData;
@@ -288,6 +288,11 @@ form.addEventListener('submit', async event => {
     form.elements.email.setCustomValidity('Enter an email address or phone number.');
     form.elements.email.reportValidity(); return;
   }
+  const isTest = values.name.trim().replace(/\s+/g, ' ').toLowerCase() === 'test test';
+  if (isTest && !values.email.trim()) {
+    form.elements.email.setCustomValidity('Enter an email address for the test confirmation.');
+    form.elements.email.reportValidity(); return;
+  }
   saving = true;
   el('book-button').disabled = true;
   el('event-choice').disabled = true;
@@ -298,17 +303,23 @@ form.addEventListener('submit', async event => {
       p_name: values.name.trim(), p_email: values.email.trim(), p_phone: values.phone.trim(), p_notes: values.notes.trim(),
       p_ref: activeReferral(selectedEvent.id)};
     let receipt;
-    try { receipt = values.company.trim() ?
-      await rpc('appt_book_company', {...parameters, p_company: values.company.trim()}) :
-      await rpc('appt_book_tracked', parameters); }
-    catch (error) {
-      // Keep ordinary bookings working while update 003 is being applied.
-      // A tracked link must never silently lose its attribution.
-      if (error.code !== 'PGRST202' || parameters.p_ref || values.company.trim()) throw error;
-      const {p_ref, ...legacy} = parameters;
-      receipt = await rpc('appt_book', legacy);
+    if (isTest) {
+      receipt = await sendTestConfirmation({slot_id: selectedSlot.id, request_id: requestId,
+        name: values.name.trim(), email: values.email.trim()});
+    } else {
+      try { receipt = values.company.trim() ?
+        await rpc('appt_book_company', {...parameters, p_company: values.company.trim()}) :
+        await rpc('appt_book_tracked', parameters); }
+      catch (error) {
+        // Keep ordinary bookings working while update 003 is being applied.
+        // A tracked link must never silently lose its attribution.
+        if (error.code !== 'PGRST202' || parameters.p_ref || values.company.trim()) throw error;
+        const {p_ref, ...legacy} = parameters;
+        receipt = await rpc('appt_book', legacy);
+      }
     }
-    el('confirmation-name').textContent = `See you then, ${receipt.name.trim().split(/\s+/)[0]}.`;
+    el('confirmation').querySelector('.eyebrow').textContent = receipt.is_test ? 'TEST ONLY - NO APPOINTMENT RESERVED' : 'YOU\u2019RE BOOKED';
+    el('confirmation-name').textContent = receipt.is_test ? 'Test confirmation' : `See you then, ${receipt.name.trim().split(/\s+/)[0]}.`;
     el('confirmation-event').textContent = receipt.event_name;
     el('confirmation-time').textContent = `${eastern(receipt.starts_at, {dateStyle: 'full', timeStyle: 'short'})} Eastern`;
     if (/^PGA\b/i.test(receipt.event_name.trim())) {
@@ -320,14 +331,17 @@ form.addEventListener('submit', async event => {
     } else {
       el('confirmation-location').textContent = receipt.location || 'Location to be arranged';
     }
-    el('confirmation-email').textContent = values.email.trim() ? 'Your appointment is saved. Email confirmation is pending; save these details for your records.' :
+    el('confirmation-email').textContent = receipt.is_test ?
+      'TEST: Confirmation email sent. No appointment was reserved, inventory was not changed, and no calendar meeting was created.' : values.email.trim() ? 'Your appointment is saved. Email confirmation is pending; save these details for your records.' :
       'Your appointment is saved. Save these details for your records.';
     el('booking-workspace').hidden = true;
     el('confirmation').hidden = false;
     form.reset();
     el('confirmation').scrollIntoView({block: 'start', behavior: 'smooth'});
   } catch (error) {
-    if (error.message.includes('no longer available') || error.message.includes('not yet open') || error.message.includes('time is not available')) {
+    if (isTest) {
+      notify(`Test confirmation failed: ${error.message} No appointment was created or inventory used.`, true);
+    } else if (error.message.includes('no longer available') || error.message.includes('not yet open') || error.message.includes('time is not available')) {
       await loadSlots(selectedEvent.id);
       notify('That time is no longer available. Please choose another available time.', true);
     } else if (error.code === 'PGRST202') notify('Booking setup is being updated. Please contact the organizer or try again shortly.', true);

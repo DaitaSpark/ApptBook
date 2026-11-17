@@ -53,6 +53,10 @@ async function accessToken() {
 export async function signIn(email, password) {
   storeSession(await call('/auth/v1/token?grant_type=password', {email, password}));
 }
+export async function sendTestConfirmation(body) {
+  if ((await settings()).preview) throw new Error('Local preview cannot send email.');
+  return call('/functions/v1/dispatch-bookings?mode=test-confirmation', body);
+}
 export async function signOut() {
   const saved = currentSession();
   storeSession(null);

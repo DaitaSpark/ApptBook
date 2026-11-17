@@ -1,4 +1,5 @@
 import {deliverCalendar, deliverEmail, googleAccessToken, removeCalendar, inspectCalendar, syncCancellations} from './delivery.js';
+import {testConfirmation} from './test-confirmation.js';
 
 const secrets = Object.fromEntries(['DISPATCH_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
   'RESEND_API_KEY', 'MAIL_FROM', 'TEAM_EMAIL', 'WORKSPACE_EMAIL', 'GOOGLE_CLIENT_ID',
@@ -17,6 +18,8 @@ async function sameSecret(supplied: string, expected: string) {
   return left.reduce((difference, value, index) => difference | (value ^ right[index]), 0) === 0;
 }
 Deno.serve(async request => {
+  if (new URL(request.url).searchParams.get('mode') === 'test-confirmation')
+    return testConfirmation(request, secrets, rpc, requestWithTimeout);
   if (request.method !== 'POST') return new Response('Method not allowed', {status: 405});
   if (!secrets.DISPATCH_SECRET || !await sameSecret(request.headers.get('x-dispatch-secret') || '', secrets.DISPATCH_SECRET))
     return new Response('Unauthorized', {status: 401});

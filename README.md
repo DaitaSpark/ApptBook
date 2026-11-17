@@ -80,6 +80,37 @@ Alternatively create a **new Blueprint** using `render.yaml`; it declares the sa
 
 ## Email and Google Workspace calendar
 
+### Test confirmations without creating an appointment
+
+Choose a future available time, enter **Test Test** as the guest name (case and
+extra spaces do not matter), enter an email address, and submit. The confirmation
+screen, email subject, and email body identify it as **TEST ONLY — no appointment
+reserved**. The email goes only to the address entered; no team Bcc is added.
+There is no booking, inventory decrement, booking-history flag change, ordinary
+delivery job, calendar meeting, or tracking attribution. All other names use the
+existing booking flow. Tests require an email address even if a phone is supplied.
+
+Deploy in this order:
+
+1. Run `supabase/migrations/013_test_confirmations.sql` after migrations 001–012.
+2. In the existing `dispatch-bookings` function, add `test-confirmation.js`, update
+   `index.ts`, `delivery.js`, and `confirmation.js`, and deploy all together.
+   Keep `confirmation-image.js`, secrets, JWT settings, and schedule unchanged.
+3. Deploy the website's updated `web/api.js`, `web/booking.js`, and `web/index.html`
+   via the normal Render build. No email reactivation is required.
+
+The separate test route is `dispatch-bookings?mode=test-confirmation`. Normal
+worker requests still require the dispatch secret. The public test route checks
+the magic name and retrieves the meeting details from the database. It permits
+one test per recipient per minute and ten tests overall per minute. Private
+delivery markers contain only a request ID, recipient hash, slot ID, timestamp,
+and status; markers older than one day are removed on subsequent test requests.
+They prevent duplicate emails on retries and do not appear in Admin's bookings
+or exports. Provider delivery logs still exist. No test is retried as a real
+booking if sending fails or the test endpoint has not yet been deployed.
+
+### Confirmation email delivery
+
 Confirmation emails now include a first-name greeting, an inline animated confetti
 GIF, the inline company logo, meeting details, and the existing wholesale catalogue link. PGA events also
 include Booth #5596 and the same directions shown on the confirmation screen.

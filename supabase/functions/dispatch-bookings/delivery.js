@@ -23,10 +23,10 @@ export async function googleAccessToken(secrets, request = fetch) {
 }
 
 export async function deliverEmail(booking, secrets, token, request = fetch) {
-  const mailbox = secrets.TEAM_EMAIL || secrets.WORKSPACE_EMAIL;
+  const mailbox = booking.is_test ? '' : secrets.TEAM_EMAIL || secrets.WORKSPACE_EMAIL;
   const recipient = booking.email || mailbox;
   if (!recipient) throw new Error('No email recipient configured for phone-only booking notification.');
-  const subject = `JR & Co. appointment: ${booking.event_name}`;
+  const subject = `${booking.is_test ? '[TEST - no appointment reserved] ' : ''}JR & Co. appointment: ${booking.event_name}`;
   const {text, html, attachment, logoAttachment} = confirmationEmail(booking);
   if (token && secrets.WORKSPACE_EMAIL) {
     // MIME boundaries are independent of guest input. Wrap base64 at RFC line length.

@@ -13,7 +13,8 @@ export function confirmationEmail(booking) {
     : booking.location || 'Location to be arranged';
   const welcome = pga ? "We can't wait to see you at the PGA Show." : "We can't wait to see you.";
   const meetingTime = `${formatted(booking.starts_at)} Eastern Time`;
-  const text = `Hey ${firstName},\n\nYour meeting is confirmed. Thank you!\n${welcome}\n\n` +
+  const testNote = 'TEST ONLY - no appointment reserved, no inventory used, and no calendar meeting created.';
+  const text = `${booking.is_test ? testNote + '\n\n' : ''}Hey ${firstName},\n\nYour meeting is confirmed. Thank you!\n${welcome}\n\n` +
     `${pga ? 'See you at ' : 'Location: '}${location}\n\n${booking.event_name}\n${meetingTime}\n` +
     `\nSee the industry’s best designs in our new catalogue:\n` +
     `${catalogueUrl}\n\nThank you,\nJR & Co.\nhttps://jrcogolf.com/`;
@@ -21,6 +22,7 @@ export function confirmationEmail(booking) {
 <body style="margin:0;padding:0;background:#eeefeb;color:#111511;font-family:Arial,Helvetica,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eeefeb;"><tr><td align="center" style="padding:12px 10px;">
 <table role="presentation" width="660" cellpadding="0" cellspacing="0" style="width:100%;max-width:660px;background:#fcfcfa;">
+${booking.is_test ? `<tr><td bgcolor="#fff0bc" style="padding:14px 22px;font-size:15px;font-weight:bold;line-height:1.4;">${testNote}</td></tr>` : ''}
 <tr><td style="padding:18px 22px 0;font-family:Georgia,serif;font-size:22px;">Hey ${escapeHtml(firstName)},</td></tr>
 <tr><td align="center"><img src="cid:jrco-confirmation" width="360" height="158" alt="Your meeting is confirmed. Thank you!" style="display:block;width:100%;max-width:360px;height:auto;border:0;"></td></tr>
 <tr><td style="padding:0 22px 16px;">
