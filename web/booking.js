@@ -11,7 +11,48 @@ function readFlamePreference() {
 }
 let flameAnimationsEnabled = readFlamePreference();
 const flameToggle = el('flame-motion-toggle');
+let confettiTimer;
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+function stopConfirmationConfetti() {
+  clearTimeout(confettiTimer);
+  el('confirmation').querySelector('.confirmation-confetti')?.remove();
+}
+function celebrateConfirmation() {
+  stopConfirmationConfetti();
+  if (reducedMotion.matches || !flameAnimationsEnabled || document.hidden || !Element.prototype.animate) return;
+  const card = el('confirmation');
+  const layer = document.createElement('div');
+  layer.className = 'confirmation-confetti';
+  layer.setAttribute('aria-hidden', 'true');
+  const colors = ['#355541', '#c4a15b', '#111511'];
+  const travel = card.clientHeight + 24;
+  for (let index = 0; index < 30; index++) {
+    const piece = document.createElement('span');
+    piece.style.backgroundColor = colors[index % colors.length];
+    piece.style.left = `${index % 2 ? 95 + Math.random() * 3 : 2 + Math.random() * 3}%`;
+    piece.style.width = `${4 + Math.random() * 3}px`;
+    piece.style.height = `${7 + Math.random() * 5}px`;
+    layer.append(piece);
+  }
+  card.append(layer);
+  layer.querySelectorAll('span').forEach((piece, index) => {
+    const drift = (Math.random() - .5) * 14;
+    const rotation = (index % 2 ? 1 : -1) * (180 + Math.random() * 360);
+    piece.animate([
+      {transform: 'translate3d(0,-16px,0) rotate(0deg)', opacity: 0},
+      {opacity: 1, offset: .12},
+      {opacity: 1, offset: .8},
+      {transform: `translate3d(${drift}px,${travel}px,0) rotate(${rotation}deg)`, opacity: 0}
+    ], {duration: 1900 + Math.random() * 400, delay: Math.random() * 300,
+      easing: 'cubic-bezier(.2,.5,.6,1)', fill: 'both', iterations: 1});
+  });
+  confettiTimer = setTimeout(stopConfirmationConfetti, 2700);
+}
+reducedMotion.addEventListener?.('change', () => { if (reducedMotion.matches) stopConfirmationConfetti(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopConfirmationConfetti(); });
+
 function syncFlameMotion(restart = false) {
+  if (!flameAnimationsEnabled) stopConfirmationConfetti();
   document.body.classList.toggle('flame-animation-on', flameAnimationsEnabled);
   flameToggle.textContent = `Animation: ${flameAnimationsEnabled ? 'On' : 'Off'}`;
   flameToggle.setAttribute('aria-pressed', String(flameAnimationsEnabled));
@@ -337,7 +378,8 @@ form.addEventListener('submit', async event => {
     el('booking-workspace').hidden = true;
     el('confirmation').hidden = false;
     form.reset();
-    el('confirmation').scrollIntoView({block: 'start', behavior: 'smooth'});
+    el('confirmation').scrollIntoView({block: 'start', behavior: reducedMotion.matches ? 'instant' : 'smooth'});
+    celebrateConfirmation();
   } catch (error) {
     if (isTest) {
       notify(`Test confirmation failed: ${error.message} No appointment was created or inventory used.`, true);
@@ -354,6 +396,7 @@ form.addEventListener('submit', async event => {
   }
 });
 el('another-booking').addEventListener('click', async () => {
+  stopConfirmationConfetti();
   el('confirmation').hidden = true;
   el('booking-workspace').hidden = false;
   await loadSlots(selectedEvent.id);

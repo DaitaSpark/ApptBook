@@ -113,3 +113,9 @@ body.booking-page footer { margin-top: 14px; padding-top: 10px; padding-bottom: 
 .booking-page .flame-fallback { position: absolute; left: 0; bottom: -3px; font-size: 22px; line-height: 1; }
 .booking-page #flame-motion-toggle { background: transparent; color: var(--muted); border: 1px solid var(--line); font-size: 11px; padding: 4px 9px; min-height: 32px; }
 @media (max-width: 720px) { .booking-page #flame-motion-toggle { min-height: 36px; } }
+
+/* A single decorative burst stays at the card edges and never blocks controls. */
+.booking-page #confirmation { position: relative; }
+.booking-page .confirmation-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; border-radius: inherit; }
+.booking-page .confirmation-confetti span { position: absolute; top: 0; display: block; opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .booking-page .confirmation-confetti { display: none; } }

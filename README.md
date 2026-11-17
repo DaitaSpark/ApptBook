@@ -109,6 +109,13 @@ They prevent duplicate emails on retries and do not appear in Admin's bookings
 or exports. Provider delivery logs still exist. No test is retried as a real
 booking if sending fails or the test endpoint has not yet been deployed.
 
+The on-screen confirmation plays one green, gold, and black confetti burst at
+its edges, then removes it after 2.7 seconds. It does not loop or intercept
+clicks. Reduced-motion preferences and the app's saved animation-off setting
+suppress it; leaving the confirmation or hiding the tab clears it. This is a
+website-only effect and needs no Supabase deployment. Local browser QA:
+`python build_static.py`, then `.venv/Scripts/python.exe tests/confirmation_motion_checks.py`.
+
 ### Confirmation email delivery
 
 Confirmation emails now include a first-name greeting, an inline animated confetti
