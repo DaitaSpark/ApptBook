@@ -36,7 +36,7 @@ ${booking.is_test ? `<tr><td bgcolor="#fff0bc" style="padding:14px 22px;font-siz
 </td></tr>
 <tr><td bgcolor="#10130f" style="padding:15px 22px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
 <td><table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="padding:0;"><a href="https://jrcogolf.com/"><img src="cid:jrco-logo" alt="JR &amp; Co." width="45" height="51" style="display:block;width:45px;height:51px;border:0;"></a></td></tr></table></td>
-<td align="right"><a href="https://jrcogolf.com/" style="color:#c4a15b;font-size:12px;text-decoration:none;">JRCOGOLF.COM</a></td>
+<td align="right"><a href="https://jrcogolf.com/" style="color:#ffffff;font-size:12px;text-decoration:none;">JRCOGOLF.COM</a></td>
 </tr></table></td></tr></table></td></tr></table></body></html>`;
   return {text, html, attachment: {filename: 'confirmation-confetti.gif', content: confirmationGif,
     content_type: 'image/gif', content_id: 'jrco-confirmation'},
