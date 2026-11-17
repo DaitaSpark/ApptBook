@@ -7,3 +7,5 @@ Downloaded from https://jrcogolf.com/ at the user's request for this JR & Co. ap
 - Assistant regular/bold and Barlow light WOFF2 files: the site's `cdn/fonts/assistant/` and `cdn/fonts/barlow/` assets. Assistant and Barlow are SIL Open Font License fonts; see LICENSE files in this directory.
 
 Theme reference: #ededeb and #f3f3f3 backgrounds, black foreground, Assistant body text, Barlow 300 headings. The appointment UI uses dark buttons and visible focus/availability outlines for readability.
+
+- `jrco-logo-white.png`: supplied by the user as `JR squarelogowhite.png`; original transparent white logo, used on the confirmation email's dark footer.
