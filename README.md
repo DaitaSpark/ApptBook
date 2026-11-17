@@ -81,7 +81,7 @@ Alternatively create a **new Blueprint** using `render.yaml`; it declares the sa
 ## Email and Google Workspace calendar
 
 Confirmation emails now include a first-name greeting, an inline animated confetti
-GIF, meeting details, and the existing wholesale catalogue link. PGA events also
+GIF, the inline company logo, meeting details, and the existing wholesale catalogue link. PGA events also
 include Booth #5596 and the same directions shown on the confirmation screen.
 Other events retain their own location. Plain-text alternatives contain all
 appointment details and the catalogue URL. No private guest notes or tracking

@@ -24,3 +24,12 @@ html{scroll-behavior:smooth}.top-strip{background:#121212;color:#fff;text-align:
 /* Static application controls */
 .event-bar>#event-picker{display:flex;align-items:center;gap:10px;margin:0;font-size:12px;max-width:400px}.event-bar>#event-picker select{margin:0;padding:6px 10px;max-width:270px}.event-bar>#event-picker[hidden]{display:none}.event-bar>div{min-width:0}.calendar-grid .calendar-day{width:100%}#availability-status:empty{display:none}#admin-availability>details{border-bottom:1px solid var(--line);padding:10px 0}#admin-availability>details p{font-size:13px;margin:7px 0}#admin-availability>details summary{padding:8px 0}#bookings-table td{white-space:pre-line}#preview-label{font-size:9px;letter-spacing:1px}.login button{min-height:44px}
 @media(max-width:720px){.event-bar>#event-picker{max-width:none;gap:8px}.event-bar>#event-picker select{flex:1;min-width:0;max-width:none;width:120px}.event-bar:has(#event-picker:not([hidden]))>div{display:none}.event-bar:has(#event-picker:not([hidden]))+p{margin-top:3px}.top-strip:has(#preview-label:not([hidden])){font-size:9px;letter-spacing:1px}.top-strip #preview-label{margin-left:10px;font-size:8px}#admin-workspace>.section-heading{flex-wrap:wrap}#admin-workspace .section-heading>div>button{margin-top:5px}}
+
+/* Keep the visibility toggle separate from the sign-in submit action. */
+.password-field{position:relative;margin-top:-10px}
+.password-field input{padding-right:54px}
+.password-field #toggle-password{position:absolute;right:2px;top:2px;width:44px;height:44px;min-height:44px;margin:0;padding:10px;background:transparent;border:0;color:var(--muted);display:grid;place-items:center}
+.password-field #toggle-password:hover{color:var(--ink);background:#f0f0ed}
+.password-field #toggle-password:focus-visible{outline:2px solid var(--accent);outline-offset:0}
+.confirmation-company-logo{display:block;width:auto;height:60px;margin:0 auto 12px}
+footer .company-logo{display:block;width:auto;height:44px}

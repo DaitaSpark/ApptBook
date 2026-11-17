@@ -8,7 +8,7 @@ const booking = {id: 'preview-booking', name: 'Jeff Eckard', email: 'preview@exa
 const email = confirmationEmail(booking);
 fs.mkdirSync('instance/email-preview', {recursive: true});
 fs.writeFileSync('instance/email-preview/confirmation.html',
-  email.html.replace('cid:jrco-confirmation', `data:image/gif;base64,${email.attachment.content}`));
+  email.html.replace('cid:jrco-confirmation', `data:image/gif;base64,${email.attachment.content}`).replace('cid:jrco-logo', `data:image/png;base64,${email.logoAttachment.content}`));
 await deliverEmail(booking, {WORKSPACE_EMAIL: 'info@jrcogolf.com'}, 'preview-only', async (_url, init) => {
   fs.writeFileSync('instance/email-preview/confirmation.eml', Buffer.from(JSON.parse(init.body).raw, 'base64url'));
   return new Response('{}');

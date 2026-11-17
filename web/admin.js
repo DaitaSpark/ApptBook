@@ -5,6 +5,18 @@ const stateLabel = value => ({queued: 'pending', processing: 'sending', sent: 's
   skipped: 'not sent (before email activation)', not_requested: 'not requested'})[value] || 'pending';
 const cell = text => { const node = document.createElement('td'); node.textContent = text || ''; return node; };
 
+function setPasswordVisible(visible) {
+  el('admin-password').type = visible ? 'text' : 'password';
+  const toggle = el('toggle-password');
+  toggle.setAttribute('aria-pressed', String(visible));
+  toggle.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+  toggle.querySelector('.eye-open').hidden = visible;
+  toggle.querySelector('.eye-closed').hidden = !visible;
+}
+el('toggle-password').addEventListener('click', () => {
+  setPasswordVisible(el('admin-password').type === 'password');
+});
+
 async function dashboard() {
   const data = await rpc('appt_admin_dashboard', {}, true);
   events = data.events;
@@ -146,7 +158,7 @@ function mutation(id, action) {
   el(id).addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.target;
-    const button = form.querySelector('button');
+    const button = form.querySelector('button[type="submit"], button:not([type])');
     if (button.disabled) return;
     button.disabled = true;
     try {
@@ -162,6 +174,7 @@ function mutation(id, action) {
 mutation('login-form', async values => {
   await signIn(values.email.trim(), values.password);
   el('login-form').elements.password.value = '';
+  setPasswordVisible(false);
   try { await dashboard(); }
   catch (error) { await signOut(); throw error; }
   return 'Signed in.';

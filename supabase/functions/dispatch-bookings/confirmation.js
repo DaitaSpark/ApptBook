@@ -1,4 +1,4 @@
-import {confirmationGif} from './confirmation-image.js';
+import {confirmationGif, confirmationLogo} from './confirmation-image.js';
 
 export const catalogueUrl = 'https://jrcogolf.com/pages/wholesale-catalog';
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g,
@@ -33,9 +33,11 @@ export function confirmationEmail(booking) {
 <table role="presentation" cellpadding="0" cellspacing="0"><tr><td bgcolor="#355541" style="border-radius:3px;"><a href="${catalogueUrl}" style="display:inline-block;padding:14px 22px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;">See the industry&#8217;s best designs in our new catalogue &#8599;</a></td></tr></table>
 </td></tr>
 <tr><td bgcolor="#10130f" style="padding:15px 22px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td style="font-family:Georgia,serif;font-size:25px;font-weight:bold;font-style:italic;color:#ffffff;">JR &amp; Co.</td>
+<td><table role="presentation" cellpadding="0" cellspacing="0"><tr><td bgcolor="#ffffff" style="padding:6px 10px;"><a href="https://jrcogolf.com/"><img src="cid:jrco-logo" alt="JR &amp; Co." width="45" height="51" style="display:block;width:45px;height:51px;border:0;"></a></td></tr></table></td>
 <td align="right"><a href="https://jrcogolf.com/" style="color:#c4a15b;font-size:12px;text-decoration:none;">JRCOGOLF.COM</a></td>
 </tr></table></td></tr></table></td></tr></table></body></html>`;
   return {text, html, attachment: {filename: 'confirmation-confetti.gif', content: confirmationGif,
-    content_type: 'image/gif', content_id: 'jrco-confirmation'}};
+    content_type: 'image/gif', content_id: 'jrco-confirmation'},
+    logoAttachment: {filename: 'jrco-logo.png', content: confirmationLogo,
+      content_type: 'image/png', content_id: 'jrco-logo'}};
 }

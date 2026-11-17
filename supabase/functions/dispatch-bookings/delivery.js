@@ -27,7 +27,7 @@ export async function deliverEmail(booking, secrets, token, request = fetch) {
   const recipient = booking.email || mailbox;
   if (!recipient) throw new Error('No email recipient configured for phone-only booking notification.');
   const subject = `JR & Co. appointment: ${booking.event_name}`;
-  const {text, html, attachment} = confirmationEmail(booking);
+  const {text, html, attachment, logoAttachment} = confirmationEmail(booking);
   if (token && secrets.WORKSPACE_EMAIL) {
     // MIME boundaries are independent of guest input. Wrap base64 at RFC line length.
     const related = `related_${crypto.randomUUID()}`;
@@ -46,7 +46,11 @@ export async function deliverEmail(booking, secrets, token, request = fetch) {
       `--${related}`, 'Content-Type: image/gif; name="confirmation-confetti.gif"',
       'Content-Disposition: inline; filename="confirmation-confetti.gif"',
       'Content-ID: <jrco-confirmation>', 'Content-Transfer-Encoding: base64', '',
-      wrapped(attachment.content), `--${related}--`, ''].join('\r\n');
+      wrapped(attachment.content),
+      `--${related}`, 'Content-Type: image/png; name="jrco-logo.png"',
+      'Content-Disposition: inline; filename="jrco-logo.png"',
+      'Content-ID: <jrco-logo>', 'Content-Transfer-Encoding: base64', '',
+      wrapped(logoAttachment.content), `--${related}--`, ''].join('\r\n');
     await checked(await request('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST', headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
       body: JSON.stringify({raw: base64(message).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')})}), 'Gmail');
@@ -54,7 +58,7 @@ export async function deliverEmail(booking, secrets, token, request = fetch) {
     await checked(await request('https://api.resend.com/emails', {method: 'POST', headers: {
       Authorization: `Bearer ${secrets.RESEND_API_KEY}`, 'Content-Type': 'application/json',
       'Idempotency-Key': `appointment-${booking.id}`}, body: JSON.stringify({
-        from: secrets.MAIL_FROM, to: [recipient], subject, text, html, attachments: [attachment],
+        from: secrets.MAIL_FROM, to: [recipient], subject, text, html, attachments: [attachment, logoAttachment],
         ...(booking.email && mailbox && mailbox !== booking.email ? {bcc: [mailbox]} : {})})}), 'Email');
   }
 }
