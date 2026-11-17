@@ -1,4 +1,4 @@
-"""Local browser checks for one-shot confirmation confetti; no live booking calls."""
+"""Local browser checks for repeating confirmation confetti; no live booking calls."""
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -59,15 +59,17 @@ try:
             if reduced or disabled:
                 assert layer.count() == 0
             else:
-                assert layer.locator('span').count() == 30
+                assert layer.locator('span').count() == (44 if width < 500 else 64)
                 assert layer.get_attribute('aria-hidden') == 'true'
                 assert layer.evaluate("node => getComputedStyle(node).pointerEvents") == 'none'
-                assert layer.evaluate("node => node.getAnimations({subtree:true}).every(a=>a.effect.getTiming().iterations===1)")
-                assert layer.locator('span').evaluate_all("nodes=>nodes.every(n=>parseFloat(n.style.left)<6 || parseFloat(n.style.left)>94)")
-                page.clock.run_for(2800)
+                assert layer.evaluate("node => node.getAnimations({subtree:true}).every(a=>a.effect.getTiming().iterations===Infinity)")
+                assert layer.locator('span').evaluate_all("nodes=>nodes.some(n=>parseFloat(n.style.left)>30 && parseFloat(n.style.left)<70)")
+                page.clock.run_for(10000)
+                assert layer.count() == 1
+                page.locator('#flame-motion-toggle').click()
                 assert layer.count() == 0
-                page.clock.run_for(1000)
-                assert layer.count() == 0
+                page.locator('#flame-motion-toggle').click()
+                assert layer.count() == 1
             assert page.locator('#confirmation-time').is_visible()
             assert page.locator('#another-booking').is_enabled()
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
@@ -76,6 +78,6 @@ try:
             assert not errors, errors
             page.close()
         browser.close()
-    print('PASS desktop/mobile one-shot confetti, edge-only noninteractive pieces, cleanup, reduced motion and saved animation-off preference')
+    print('PASS desktop/mobile repeating full-card confetti, noninteractive pieces, cleanup, reduced motion and saved animation-off preference')
 finally:
     server.shutdown()

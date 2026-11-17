@@ -114,8 +114,9 @@ body.booking-page footer { margin-top: 14px; padding-top: 10px; padding-bottom: 
 .booking-page #flame-motion-toggle { background: transparent; color: var(--muted); border: 1px solid var(--line); font-size: 11px; padding: 4px 9px; min-height: 32px; }
 @media (max-width: 720px) { .booking-page #flame-motion-toggle { min-height: 36px; } }
 
-/* A single decorative burst stays at the card edges and never blocks controls. */
-.booking-page #confirmation { position: relative; }
-.booking-page .confirmation-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; border-radius: inherit; }
+/* Continuous confetti sits behind confirmation content and never blocks controls. */
+.booking-page #confirmation { position: relative; isolation: isolate; }
+.booking-page #confirmation > :not(.confirmation-confetti) { position: relative; z-index: 1; }
+.booking-page .confirmation-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; border-radius: inherit; z-index: 0; }
 .booking-page .confirmation-confetti span { position: absolute; top: 0; display: block; opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .booking-page .confirmation-confetti { display: none; } }

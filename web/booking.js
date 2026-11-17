@@ -11,11 +11,11 @@ function readFlamePreference() {
 }
 let flameAnimationsEnabled = readFlamePreference();
 const flameToggle = el('flame-motion-toggle');
-let confettiTimer;
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 function stopConfirmationConfetti() {
-  clearTimeout(confettiTimer);
-  el('confirmation').querySelector('.confirmation-confetti')?.remove();
+  const layer = el('confirmation').querySelector('.confirmation-confetti');
+  layer?.getAnimations({subtree: true}).forEach(animation => animation.cancel());
+  layer?.remove();
 }
 function celebrateConfirmation() {
   stopConfirmationConfetti();
@@ -24,36 +24,47 @@ function celebrateConfirmation() {
   const layer = document.createElement('div');
   layer.className = 'confirmation-confetti';
   layer.setAttribute('aria-hidden', 'true');
-  const colors = ['#355541', '#c4a15b', '#111511'];
-  const travel = card.clientHeight + 24;
-  for (let index = 0; index < 30; index++) {
+  const colors = ['#355541', '#c4a15b', '#111511', '#b89348', '#819c87'];
+  const travel = card.clientHeight + 40;
+  const count = card.clientWidth < 500 ? 44 : 64;
+  for (let index = 0; index < count; index++) {
     const piece = document.createElement('span');
     piece.style.backgroundColor = colors[index % colors.length];
-    piece.style.left = `${index % 2 ? 95 + Math.random() * 3 : 2 + Math.random() * 3}%`;
-    piece.style.width = `${4 + Math.random() * 3}px`;
-    piece.style.height = `${7 + Math.random() * 5}px`;
+    // Spread across the entire card, with a different phase for each piece.
+    piece.style.left = `${(index + Math.random()) / count * 100}%`;
+    const size = 4 + Math.random() * 4;
+    piece.style.width = `${size}px`;
+    piece.style.height = `${index % 3 ? size * 1.7 : size}px`;
+    piece.style.borderRadius = index % 3 ? '1px' : '50%';
     layer.append(piece);
   }
   card.append(layer);
   layer.querySelectorAll('span').forEach((piece, index) => {
-    const drift = (Math.random() - .5) * 14;
-    const rotation = (index % 2 ? 1 : -1) * (180 + Math.random() * 360);
+    const drift = (Math.random() - .5) * 70;
+    const rotation = (index % 2 ? 1 : -1) * (240 + Math.random() * 360);
+    const duration = 4000 + Math.random() * 2200;
+    const transform = (progress, sway) => `translate3d(${drift * progress + sway}px,${-20 + travel * progress}px,0) rotate(${rotation * progress}deg) rotateY(${progress * 540}deg)`;
     piece.animate([
-      {transform: 'translate3d(0,-16px,0) rotate(0deg)', opacity: 0},
-      {opacity: 1, offset: .12},
-      {opacity: 1, offset: .8},
-      {transform: `translate3d(${drift}px,${travel}px,0) rotate(${rotation}deg)`, opacity: 0}
-    ], {duration: 1900 + Math.random() * 400, delay: Math.random() * 300,
-      easing: 'cubic-bezier(.2,.5,.6,1)', fill: 'both', iterations: 1});
+      {transform: transform(0, 0), opacity: 0},
+      {transform: transform(.15, 10), opacity: .65, offset: .15},
+      {transform: transform(.4, -12), opacity: .65, offset: .4},
+      {transform: transform(.7, 12), opacity: .65, offset: .7},
+      {transform: transform(.9, -6), opacity: .5, offset: .9},
+      {transform: transform(1, 0), opacity: 0}
+    ], {duration, delay: -Math.random() * duration, easing: 'linear', iterations: Infinity});
   });
-  confettiTimer = setTimeout(stopConfirmationConfetti, 2700);
 }
-reducedMotion.addEventListener?.('change', () => { if (reducedMotion.matches) stopConfirmationConfetti(); });
+reducedMotion.addEventListener?.('change', () => {
+  if (reducedMotion.matches) stopConfirmationConfetti();
+  else syncFlameMotion();
+});
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopConfirmationConfetti(); });
 
 function syncFlameMotion(restart = false) {
   if (!flameAnimationsEnabled) stopConfirmationConfetti();
   document.body.classList.toggle('flame-animation-on', flameAnimationsEnabled);
+  if (!document.hidden && flameAnimationsEnabled && !reducedMotion.matches && !el('confirmation').hidden
+    && !el('confirmation').querySelector('.confirmation-confetti')) celebrateConfirmation();
   flameToggle.textContent = `Animation: ${flameAnimationsEnabled ? 'On' : 'Off'}`;
   flameToggle.setAttribute('aria-pressed', String(flameAnimationsEnabled));
   document.querySelectorAll('.last-place-fire svg').forEach(svg => {
@@ -379,6 +390,7 @@ form.addEventListener('submit', async event => {
     el('confirmation').hidden = false;
     form.reset();
     el('confirmation').scrollIntoView({block: 'start', behavior: reducedMotion.matches ? 'instant' : 'smooth'});
+    flameToggle.hidden = false;
     celebrateConfirmation();
   } catch (error) {
     if (isTest) {
